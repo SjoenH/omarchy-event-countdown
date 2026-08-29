@@ -261,24 +261,26 @@ Panel {
                         font.bold: true
                     }
 
-                    ButtonGroup {
+                    ExplainDropdown {
                         width: parent.width
+                        label: "Count direction"
                         options: [{
                             "value": "countdown",
-                            "label": "Count down"
+                            "label": "Count down",
+                            "description": "Time until the event, shown for upcoming events"
                         }, {
                             "value": "countup",
-                            "label": "Count up"
+                            "label": "Count up",
+                            "description": "Time since the event, shown for past events"
                         }, {
                             "value": "both",
-                            "label": "Both"
+                            "label": "Both",
+                            "description": "Count down if upcoming, up if past"
                         }]
                         value: root.edMode
                         foreground: root.barForeground
-                        background: Color.background
                         accent: Color.accent
                         fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                        fontSize: Style.font.caption
                         onChanged: function(mode) {
                             root.switchMode(mode);
                         }
@@ -292,24 +294,26 @@ Panel {
                         font.bold: true
                     }
 
-                    ButtonGroup {
+                    ExplainDropdown {
                         width: parent.width
+                        label: "How to display the count"
                         options: [{
                             "value": "days",
-                            "label": "Exact days"
+                            "label": "Exact days",
+                            "description": "Always count in whole days, like \"34d\""
                         }, {
                             "value": "units",
-                            "label": "Fuzzy units"
+                            "label": "Fuzzy units",
+                            "description": "Round to days, weeks, months, or years, like \"3mo\""
                         }, {
                             "value": "date",
-                            "label": "Show date"
+                            "label": "Show date",
+                            "description": "Show the event's date instead, like \"Jan 1\""
                         }]
                         value: root.edPrecision
                         foreground: root.barForeground
-                        background: Color.background
                         accent: Color.accent
                         fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                        fontSize: Style.font.caption
                         onChanged: function(precision) {
                             root.switchPrecision(precision);
                         }

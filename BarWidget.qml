@@ -308,6 +308,11 @@ function _dateLabel(evt, o, upcoming, anchor) {
                 padEvents = parseEvents(patch.events);
                 root.events = padEvents;
             }
+            if (patch.precision !== undefined) {
+                var q = String(patch.precision);
+                if (q === "days" || q === "units" || q === "date")
+                    root.precision = q;
+            }
         }
         var entry = {
             "id": root.moduleName,
@@ -378,6 +383,11 @@ function _dateLabel(evt, o, upcoming, anchor) {
         root.syncPanel();
     }
     onEventsChanged: {
+        root.refresh();
+        refreshTimer.restart();
+        root.syncPanel();
+    }
+    onPrecisionChanged: {
         root.refresh();
         refreshTimer.restart();
         root.syncPanel();
