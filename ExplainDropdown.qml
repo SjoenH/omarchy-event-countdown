@@ -3,11 +3,12 @@ import QtQuick.Controls
 import qs.Commons
 import qs.Ui
 
-// Themed single-select dropdown like qs.Ui.Dropdown, with one addition: a
-// muted caption below the trigger explains what the currently-selected
-// option means. `options` takes an array of { value, label, description }
+// Themed single-select dropdown like qs.Ui.Dropdown. Options carry a
+// short `description`, rendered next to the label in the popup row, and a
+// fuller `explanation` shown in a caption below the trigger once selected.
+// `options` takes an array of { value, label, description, explanation }
 // objects; plain string[] or { value, label } are accepted and simply get
-// an empty explanation.
+// empty helper text.
 Item {
   id: root
 
@@ -46,28 +47,41 @@ Item {
   function optionDescription(o) {
     return (o && typeof o === "object" && o.description !== undefined) ? String(o.description) : ""
   }
+  function optionExplanation(o) {
+    return (o && typeof o === "object" && o.explanation !== undefined) ? String(o.explanation) : ""
+  }
   function currentLabel() {
     for (var i = 0; i < options.length; i++) {
       if (optionValue(options[i]) === value) return optionLabel(options[i])
     }
     return value
   }
-  function currentDescription() {
+  function currentExplanation() {
     for (var i = 0; i < options.length; i++) {
-      if (optionValue(options[i]) === value) return optionDescription(options[i])
+      if (optionValue(options[i]) === value) return optionExplanation(options[i])
     }
     return ""
   }
-
-  // Trigger height plus the wrapped explanation caption (and optional label).
-  readonly property real explanationHeight: explanation.visible ? explanation.implicitHeight + Style.spacing.labelGap : 0
-  implicitWidth: Style.spacing.dropdownWidth
-  implicitHeight: rowHeight + labelHeight + explanationHeight
-
+  function optionRowHeight(o) {
+    return optionDescription(o) !== "" ? 44 : root.popupRowHeight
+  }
   function hasLabel() {
     return showLabel && label !== ""
   }
   readonly property real labelHeight: hasLabel() ? Style.font.caption * 1.2 + Style.spacing.labelGap : 0
+  readonly property real explanationHeight: explanation.visible ? explanation.implicitHeight + Style.spacing.labelGap : 0
+  implicitWidth: Style.spacing.dropdownWidth
+  implicitHeight: rowHeight + labelHeight + explanationHeight
+
+  // Height of the open popup, capped to 8 rows so it scrolls on small
+  // panes rather than covering the whole screen.
+  function popupHeight() {
+    var total = 0
+    for (var i = 0; i < options.length; i++) total += optionRowHeight(options[i]) + Style.spacing.labelGap
+    total -= Style.spacing.labelGap
+    total += Style.spacing.xxs
+    return Math.min(total, 8 * 44 + 7 * Style.spacing.labelGap + Style.spacing.xxs)
+  }
 
   function triggerOpen() { popup.opened ? popup.close() : popup.open() }
 
@@ -152,8 +166,7 @@ Item {
         x: 0
         y: trigger.height + Style.spacing.xxs
         width: trigger.width
-        implicitHeight: Math.min(root.options.length * root.popupRowHeight + Math.max(0, root.options.length - 1) * Style.spacing.labelGap + Style.spacing.xxs,
-                                 root.popupRowHeight * 8 + 7 * Style.spacing.labelGap + Style.spacing.xxs)
+        implicitHeight: root.popupHeight()
         padding: Style.spacing.hairline
         leftPadding: Border.left(root.popupBorderSpec) + Style.spacing.hairline
         rightPadding: Border.right(root.popupBorderSpec) + Style.spacing.hairline
@@ -209,26 +222,43 @@ Item {
             popup.close()
           }
 
-          delegate: Rectangle {
+          delegate: BorderSurface {
             required property var modelData
             required property int index
             width: optionList.width
-            height: root.popupRowHeight
-            color: index === optionList.currentIndex
-              ? Style.hoverFillFor(root.foreground, root.accent)
-              : "transparent"
+            height: root.optionRowHeight(modelData)
+            radius: Style.cornerRadius
+            readonly property bool _cur: index === optionList.currentIndex
+            color: _cur ? Style.hoverFillFor(root.foreground, root.accent) : "transparent"
+            borderSpec: _cur ? Border.controlSpec("hover-cursor", root.foreground, root.accent) : Border.localOrSurfaceSpec("popups", "border", "transparent", "transparent", 0)
 
-            Text {
+            Column {
               anchors.left: parent.left
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               anchors.leftMargin: Style.spacing.controlPaddingX
               anchors.rightMargin: Style.spacing.controlPaddingX
-              text: root.optionLabel(modelData)
-              color: index === optionList.currentIndex ? Style.hoverStateColor(root.foreground, root.accent) : root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              elide: Text.ElideRight
+              spacing: Style.spacing.xxs
+
+              Text {
+                width: parent.width
+                text: root.optionLabel(modelData)
+                color: index === optionList.currentIndex ? Style.hoverStateColor(root.foreground, root.accent) : root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                font.bold: index === optionList.currentIndex
+                elide: Text.ElideRight
+              }
+
+              Text {
+                visible: root.optionDescription(modelData) !== ""
+                width: parent.width
+                text: root.optionDescription(modelData)
+                color: Qt.darker(index === optionList.currentIndex ? Style.hoverStateColor(root.foreground, root.accent) : root.foreground, 1.45)
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                elide: Text.ElideRight
+              }
             }
 
             MouseArea {
@@ -243,12 +273,13 @@ Item {
       }
     }
 
-    // Explanation of the current selection, rendered below the select.
+    // Fuller explanation of the current selection, rendered below the
+    // select and kept in sync with its value.
     Text {
       id: explanation
-      visible: root.showExplanation && root.currentDescription() !== ""
+      visible: root.showExplanation && root.currentExplanation() !== ""
       width: parent.width
-      text: root.currentDescription()
+      text: root.currentExplanation()
       color: Qt.darker(root.foreground, 1.45)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption

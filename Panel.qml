@@ -266,15 +266,18 @@ Panel {
                         options: [{
                             "value": "countdown",
                             "label": "Count down",
-                            "description": "Time until the event"
+                            "description": "until it happens",
+                            "explanation": "Counts down the time remaining until the next occurrence of the event."
                         }, {
                             "value": "countup",
                             "label": "Count up",
-                            "description": "Time since the event"
+                            "description": "since it happened",
+                            "explanation": "Counts up the time elapsed since the last occurrence, for past events."
                         }, {
                             "value": "both",
                             "label": "Both",
-                            "description": "Auto-picks a direction"
+                            "description": "either way",
+                            "explanation": "Counts down when the event is upcoming, and up once it has passed."
                         }]
                         value: root.edMode
                         foreground: root.barForeground
@@ -298,15 +301,18 @@ Panel {
                         options: [{
                             "value": "days",
                             "label": "Exact days",
-                            "description": "Whole days, e.g. 34d"
+                            "description": "e.g. 34d",
+                            "explanation": "Always counts in whole days (e.g. 34d)."
                         }, {
                             "value": "units",
                             "label": "Fuzzy units",
-                            "description": "Rounded units, e.g. 3mo"
+                            "description": "e.g. 3mo",
+                            "explanation": "Rounds to days, weeks, months, or years (e.g. 3mo) for easier reading."
                         }, {
                             "value": "date",
                             "label": "Show date",
-                            "description": "Shows the date"
+                            "description": "e.g. Jan 1",
+                            "explanation": "Shows the event's date itself (e.g. Jan 1) instead of a count."
                         }]
                         value: root.edPrecision
                         foreground: root.barForeground
