@@ -212,43 +212,15 @@ function _dateLabel(evt, o, upcoming, anchor) {
         if (!root.events || root.events.length === 0)
             return null;
 
-        if (root.mode === "countdown") {
-            var bestUp = null, bestDaysUp = 1e+09;
-            for (var i = 0; i < root.events.length; i++) {
-                var e = root.events[i], c = _countOf(e);
-                if (!c.upcoming)
-                    continue;
+        var e = root.events[0];
+        var c = _countOf(e);
+        if (root.mode === "countdown" && !c.upcoming)
+            return null;
 
-                if (c.days < bestDaysUp) {
-                    bestDaysUp = c.days;
-                    bestUp = e;
-                }
-            }
-            return bestUp;
-        }
-        if (root.mode === "countup") {
-            var bestP = null, bestDaysP = -1;
-            for (var j = 0; j < root.events.length; j++) {
-                var e2 = root.events[j], c2 = _countOf(e2);
-                if (c2.upcoming)
-                    continue;
+        if (root.mode === "countup" && c.upcoming)
+            return null;
 
-                if (c2.days > bestDaysP) {
-                    bestDaysP = c2.days;
-                    bestP = e2;
-                }
-            }
-            return bestP;
-        }
-        var best = null, bestAbs = 1e+09;
-        for (var k = 0; k < root.events.length; k++) {
-            var e3 = root.events[k], c3 = _countOf(e3);
-            if (c3.days < bestAbs) {
-                bestAbs = c3.days;
-                best = e3;
-            }
-        }
-        return best;
+        return e;
     }
 
     function _monthDayName(evt) {
@@ -268,12 +240,8 @@ function _dateLabel(evt, o, upcoming, anchor) {
         if (!root.events || root.events.length === 0)
             return "Event Countdown\nAdd an event to begin.";
 
-        var lines = ["Event Countdown"];
-        for (var i = 0; i < root.events.length; i++) {
-            var e = root.events[i];
-            lines.push((e.name !== "" ? e.name : _monthDayName(e)) + " — " + _countOf(e).text);
-        }
-        return lines.join("\n");
+        var e = root.events[0];
+        return "Event Countdown\n" + (e.name !== "" ? e.name : _monthDayName(e)) + " — " + _countOf(e).text;
     }
 
     function _parseEvents(arr) {
@@ -281,7 +249,7 @@ function _dateLabel(evt, o, upcoming, anchor) {
             return [];
 
         var out = [];
-        for (var i = 0; i < arr.length; i++) {
+        for (var i = 0; i < arr.length && out.length < 1; i++) {
             var e = arr[i];
             if (!e || typeof e !== "object")
                 continue;

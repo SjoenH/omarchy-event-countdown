@@ -16,8 +16,7 @@ Panel {
     // 3a. State properties
     property QtObject anchorItem: null
     property QtObject hostWidget: null
-    property int selIndex: -1
-    property var workEvents: []
+    property var workEvent: null
     property string edMode: "both"
     property string edPrecision: "units"
     property string edName: ""
@@ -35,48 +34,22 @@ Panel {
         return root.hostWidget ? (root.hostWidget.precision || "units") : "units";
     }
 
-    function eventsW() {
-        return root.hostWidget ? (root.hostWidget.events || []) : [];
-    }
-
     function syncFromWidget() {
-        root.workEvents = root.deepCopyEvents(root.eventsW());
         root.edMode = root.modeW();
         root.edPrecision = root.precisionW();
-        if (root.selIndex >= root.workEvents.length)
-            root.selIndex = -1;
-
-        if (root.selIndex < 0 && root.workEvents.length > 0)
-            root.selIndex = 0;
-
-        root.loadSelection();
+        root.workEvent = root.currentW();
+        root.loadEvent();
     }
 
-    function deepCopyEvents(arr) {
-        var out = [];
-        for (var i = 0; i < arr.length; i++) {
-            var e = arr[i];
-            out.push({
-                "id": e.id,
-                "name": e.name,
-                "month": e.month,
-                "day": e.day,
-                "year": e.year,
-                "repeats": e.repeats
-            });
-        }
-        return out;
-    }
-
-    function current() {
-        if (root.selIndex < 0 || root.selIndex >= root.workEvents.length)
+    function currentW() {
+        if (!root.hostWidget || !root.hostWidget.events || root.hostWidget.events.length === 0)
             return null;
 
-        return root.workEvents[root.selIndex];
+        return root.hostWidget.events[0];
     }
 
-    function loadSelection() {
-        var e = root.current();
+    function loadEvent() {
+        var e = root.workEvent;
         root.edName = e ? e.name : "";
         root.edMonth = e ? e.month : 1;
         root.edDay = e ? e.day : 1;
@@ -84,8 +57,8 @@ Panel {
         root.edRepeats = e ? e.repeats : true;
     }
 
-    function applySelection() {
-        var e = root.current();
+    function applyEditors() {
+        var e = root.workEvent;
         if (!e)
             return ;
 
@@ -112,13 +85,13 @@ Panel {
     }
 
     function dirty() {
-        if (root.hostWidget)
-            root.hostWidget.previewEvents(root.workEvents);
+        if (root.hostWidget && root.workEvent)
+            root.hostWidget.previewEvents([root.workEvent]);
 
     }
 
     function canCommit() {
-        var e = root.current();
+        var e = root.workEvent;
         if (!e)
             return false;
 
@@ -141,16 +114,16 @@ Panel {
         if (!root.hostWidget)
             return ;
 
-        root.applySelection();
+        root.applyEditors();
         if (!root.canCommit())
             return ;
 
         root.hostWidget.persist({
-            "events": root.workEvents
+            "events": [root.workEvent]
         });
     }
 
-function switchMode(mode) {
+    function switchMode(mode) {
         if (mode === root.edMode)
             return;
 
@@ -178,28 +151,19 @@ function switchMode(mode) {
         if (root.hostWidget) {
             var e = root.hostWidget.emptyEvent();
             e.id = root.hostWidget.newId();
-            var next = root.workEvents.slice();
-            next.push(e);
-            root.workEvents = next;
-            root.selIndex = root.workEvents.length - 1;
-            root.loadSelection();
+            root.workEvent = e;
+            root.loadEvent();
             root.dirty();
         }
     }
 
-    function removeSelected() {
-        if (root.selIndex < 0 || root.selIndex >= root.workEvents.length)
-            return ;
-
-        var next = root.workEvents.slice();
-        next.splice(root.selIndex, 1);
-        root.workEvents = next;
-        if (root.workEvents.length === 0)
-            root.selIndex = -1;
-        else if (root.selIndex >= root.workEvents.length)
-            root.selIndex = root.workEvents.length - 1;
-        root.loadSelection();
-        root.dirty();
+    function removeEvent() {
+        if (root.hostWidget) {
+            root.workEvent = null;
+            root.hostWidget.persist({
+                "events": []
+            });
+        }
     }
 
     function open() {
@@ -208,7 +172,7 @@ function switchMode(mode) {
     }
 
     function close() {
-        root.applySelection();
+        root.applyEditors();
         if (root.canCommit())
             root.commit();
 
@@ -353,125 +317,30 @@ function switchMode(mode) {
 
                 }
 
-                // --- Events list ---
+                // --- Single event editor ---
                 Column {
                     width: parent.width
-                    spacing: Style.space(4)
+                    spacing: Style.space(8)
+                    visible: root.workEvent === null
 
                     Text {
-                        text: root.workEvents.length === 0 ? "No events yet" : "Events"
+                        width: parent.width
+                        text: "No event yet"
                         color: Qt.darker(root.barForeground, 1.4)
                         font.family: root.bar ? root.bar.fontFamily : Style.font.family
                         font.pixelSize: Style.font.caption
                         font.bold: true
                     }
 
-                    Flickable {
+                    Button {
                         width: parent.width
-                        height: Math.min(root.workEvents.length, 5) * (Style.space(34)) + 4
-                        contentHeight: listCol.implicitHeight
-                        clip: true
-                        interactive: root.workEvents.length > 5
-
-                        Column {
-                            id: listCol
-
-                            width: parent.width
-                            spacing: Style.space(6)
-
-                            Repeater {
-                                model: root.workEvents
-
-                                BorderSurface {
-                                    property bool selected: index === root.selIndex
-
-                                    width: parent.width
-                                    implicitHeight: Style.space(34)
-                                    radius: Style.cornerRadius
-                                    color: selected ? Qt.lighter(root.barBg(), 1.5) : root.barBg()
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        Accessible.role: Accessible.Button
-                                        Accessible.name: "Event item"
-                                        onClicked: {
-                                            root.applySelection();
-                                            root.selIndex = index;
-                                            root.loadSelection();
-                                        }
-
-                                        Row {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: Style.space(8)
-                                            anchors.rightMargin: Style.space(8)
-                                            spacing: Style.space(8)
-
-                                            Column {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                width: parent.width - barRow.width - Style.space(16)
-                                                spacing: Style.space(2)
-
-                                                Text {
-                                                    width: parent.width
-                                                    elide: Text.ElideRight
-                                                    text: modelData.name !== "" ? modelData.name : root.nameOf(modelData)
-                                                    color: root.barForeground
-                                                    font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                                                    font.pixelSize: Style.font.body
-                                                }
-
-                                                Rectangle {
-                                                    width: parent.width
-                                                    height: 6
-                                                    radius: 3
-                                                    color: Qt.darker(root.barBg(), 1.3)
-
-                                                    Rectangle {
-                                                        width: parent.width * root.fracOf(modelData)
-                                                        height: parent.height
-                                                        radius: 3
-                                                        color: selected ? Color.accent : root.barForeground
-                                                    }
-
-                                                }
-
-                                            }
-
-                                            Row {
-                                                id: barRow
-
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                spacing: Style.space(6)
-
-                                                Text {
-                                                    text: root.countOf(modelData).text
-                                                    color: Qt.darker(root.barForeground, 1.3)
-                                                    font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                                                    font.pixelSize: Style.font.caption
-                                                }
-
-                                                Rectangle {
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                    width: 7
-                                                    height: 7
-                                                    radius: 4
-                                                    color: root.countOf(modelData).upcoming ? Color.accent : Qt.lighter(Color.background, 1.3)
-                                                }
-
-                                            }
-
-                                        }
-
-                                    }
-
-                                }
-
-                            }
-
-                        }
-
+                        text: "Add event"
+                        focusable: true
+                        foreground: root.barForeground
+                        accent: Color.accent
+                        fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                        fontSize: Style.font.body
+                        onClicked: root.addEvent()
                     }
 
                 }
@@ -480,7 +349,7 @@ function switchMode(mode) {
                 Column {
                     width: parent.width
                     spacing: Style.space(8)
-                    visible: root.current() !== null
+                    visible: root.workEvent !== null
 
                     Text {
                         text: "Edit event"
@@ -511,7 +380,7 @@ function switchMode(mode) {
                             font.pixelSize: Style.font.body
                             onTextChanged: {
                                 root.edName = text;
-                                root.applySelection();
+                                root.applyEditors();
                             }
                             onAccepted: root.close()
                             Keys.onEscapePressed: root.close()
@@ -546,7 +415,7 @@ function switchMode(mode) {
                                 fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
                                 onModified: function(v) {
                                     root.edMonth = v;
-                                    root.applySelection();
+                                    root.applyEditors();
                                 }
                             }
 
@@ -575,7 +444,7 @@ function switchMode(mode) {
                                 fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
                                 onModified: function(v) {
                                     root.edDay = v;
-                                    root.applySelection();
+                                    root.applyEditors();
                                 }
                             }
 
@@ -605,7 +474,7 @@ function switchMode(mode) {
                                 fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
                                 onModified: function(v) {
                                     root.edYear = v;
-                                    root.applySelection();
+                                    root.applyEditors();
                                 }
                             }
 
@@ -622,7 +491,7 @@ function switchMode(mode) {
                         fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
                         onClicked: {
                             root.edRepeats = !root.edRepeats;
-                            root.applySelection();
+                            root.applyEditors();
                         }
                     }
 
@@ -631,7 +500,7 @@ function switchMode(mode) {
                         spacing: Style.space(8)
 
                         Button {
-                            width: (parent.width - Style.space(16)) / 3
+                            width: (parent.width - Style.space(8)) / 2
                             text: "Save"
                             focusable: true
                             foreground: root.barForeground
@@ -643,42 +512,18 @@ function switchMode(mode) {
                         }
 
                         Button {
-                            width: (parent.width - Style.space(16)) / 3
+                            width: (parent.width - Style.space(8)) / 2
                             text: "Delete"
                             focusable: true
                             foreground: root.bar.urgent
                             accent: Color.accent
                             fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
                             fontSize: Style.font.body
-                            onClicked: root.removeSelected()
-                        }
-
-                        Button {
-                            width: (parent.width - Style.space(16)) / 3
-                            text: "Add"
-                            focusable: true
-                            foreground: root.barForeground
-                            accent: Color.accent
-                            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                            fontSize: Style.font.body
-                            onClicked: root.addEvent()
+                            onClicked: root.removeEvent()
                         }
 
                     }
 
-                }
-
-                // --- Add-only row ---
-                Button {
-                    width: parent.width
-                    visible: root.current() === null
-                    text: "Add event"
-                    focusable: true
-                    foreground: root.barForeground
-                    accent: Color.accent
-                    fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                    fontSize: Style.font.body
-                    onClicked: root.addEvent()
                 }
 
             }

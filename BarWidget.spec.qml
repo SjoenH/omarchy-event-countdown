@@ -59,7 +59,7 @@ TestCase {
             return [];
 
         var out = [];
-        for (var i = 0; i < arr.length; i++) {
+        for (var i = 0; i < arr.length && out.length < 1; i++) {
             var e = arr[i];
             if (!e || typeof e !== "object")
                 continue;
@@ -153,6 +153,21 @@ function _dateLabel(evt, o, now, upcoming, anchor) {
             return prefix + Math.min(11, Math.round(days / 30)) + "mo" + suffix;
 
         return prefix + Math.round(days / 365) + "y" + suffix;
+    }
+
+    function _nearestEvent(events, mode, now) {
+        if (!events || events.length === 0)
+            return null;
+
+        var e = events[0];
+        var c = _countOf(e, now);
+        if (mode === "countdown" && !c.upcoming)
+            return null;
+
+        if (mode === "countup" && c.upcoming)
+            return null;
+
+        return e;
     }
 
     function _approx(a, b, eps) {
@@ -436,7 +451,7 @@ function _dateLabel(evt, o, now, upcoming, anchor) {
         verify(_approx(_fractionOf(past, now), 1));
     }
 
-    function test_parseEventsAcceptsListLikeNonArray() {
+    function test_parseEventsKeepsOnlyFirstEvent() {
         var listLike = {
             "length": 2,
             "0": {
@@ -449,30 +464,46 @@ function _dateLabel(evt, o, now, upcoming, anchor) {
             },
             "1": {
                 "id": "b",
-                "name": "",
-                "month": 1,
-                "day": 1,
-                "year": 0,
-                "repeats": true
+                "name": "Ignored",
+                "month": 3,
+                "day": 15,
+                "year": 2027,
+                "repeats": false
             }
         };
         verify(Array.isArray(listLike) === false);
         var out = _parseEvents(listLike);
-        verify(out.length === 2);
+        verify(out.length === 1);
         verify(out[0].name === "My Birthday");
-        verify(out[1].repeats === true);
+        verify(out[0].repeats === true);
     }
 
-    function test_nearestEventBothModes() {
+    function test_parseEventsRejectsInvalidSingle() {
+        var listLike = {
+            "length": 1,
+            "0": {
+                "id": "bad",
+                "name": "No date",
+                "month": "x",
+                "day": "y",
+                "year": 0,
+                "repeats": true
+            }
+        };
+        verify(_parseEvents(listLike).length === 0);
+    }
+
+    function test_nearestEventSingleEventByMode() {
         var now = new Date(2026, 5, 5, 12, 0, 0);
-        var events = [{
+        var future = [{
             "id": "a",
             "name": "A",
             "month": 6,
             "day": 10,
-            "year": 0,
-            "repeats": true
-        }, {
+            "year": 2026,
+            "repeats": false
+        }];
+        var past = [{
             "id": "b",
             "name": "B",
             "month": 6,
@@ -480,18 +511,12 @@ function _dateLabel(evt, o, now, upcoming, anchor) {
             "year": 2026,
             "repeats": false
         }];
-        var t = _dayIndex(now);
-        var best = null, bestAbs = 1e+09;
-        for (var i = 0; i < events.length; i++) {
-            var e = events[i];
-            var o = _occurrences(e, now);
-            var days = Math.abs(o.next - t);
-            if (days < bestAbs) {
-                bestAbs = days;
-                best = e;
-            }
-        }
-        verify(best !== null);
+        verify(_nearestEvent(future, "countdown", now) === future[0]);
+        verify(_nearestEvent(past, "countdown", now) === null);
+        verify(_nearestEvent(past, "countup", now) === past[0]);
+        verify(_nearestEvent(future, "countup", now) === null);
+        verify(_nearestEvent(future, "both", now) === future[0]);
+        verify(_nearestEvent([], "both", now) === null);
     }
 
     name: "EventCountdown"
