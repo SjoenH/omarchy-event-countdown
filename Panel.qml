@@ -388,19 +388,17 @@ Panel {
     function modeW() { return root.hostWidget ? (root.hostWidget.mode || "both") : "both" }
     function eventsW() { return root.hostWidget ? (root.hostWidget.events || []) : [] }
 
+
     function syncFromWidget() {
         if (root.suppressSync) { root.suppressSync = false; return }
-        root.edUrl = root.urlW()
-        root.edLabel = root.labelW()
-        var s = root.schedW()
-        if (s && s.cron !== undefined) {
-            root.edIsCron = true
-            root.edCron = s.cron
-        } else {
-            root.edIsCron = false
-            var x = s || {}
-            root.edValue = parseInt(x.value, 10) || 30
-            root.edUnit = x.unit || "sec"
+        root.edMode = root.hostWidget ? root.hostWidget.mode : "both"
+        var e = root.current()
+        if (e) {
+            root.edName = e.name
+            root.edMonth = e.month
+            root.edDay = e.day
+            root.edYear = e.year
+            root.edRepeats = e.repeats
         }
     }
 
