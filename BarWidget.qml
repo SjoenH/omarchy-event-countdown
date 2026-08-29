@@ -119,22 +119,6 @@ BarWidget {
         return res;
     }
 
-    function _fractionOf(evt) {
-        var o = _occurrences(evt);
-        var span = o.next - o.prev;
-        if (span <= 0)
-            return 1;
-
-        var f = (_todayIndex() - o.prev) / span;
-        if (f < 0)
-            f = 0;
-
-        if (f > 1)
-            f = 1;
-
-        return f;
-    }
-
     function _countOf(evt, now, precision, mode) {
         var o = _occurrences(evt, now);
         var t = now ? _dayIndex(now) : _todayIndex();
@@ -231,7 +215,6 @@ function _dateLabel(evt, o, upcoming, anchor) {
 
     function _refresh() {
         var n = _nearestEvent();
-        barItem.barFrac = n ? _fractionOf(n) : 0;
         barItem.barName = n ? (n.name !== "" ? n.name : _monthDayName(n)) : "no events";
         barItem.barCount = n ? _countOf(n).text : "";
     }
@@ -356,10 +339,6 @@ function _dateLabel(evt, o, upcoming, anchor) {
         return _tooltipText();
     }
 
-    function fractionOf(evt) {
-        return _fractionOf(evt);
-    }
-
     function countOf(evt) {
         return _countOf(evt);
     }
@@ -477,25 +456,8 @@ function _dateLabel(evt, o, upcoming, anchor) {
             id: barContent
 
             anchors.centerIn: parent
+            height: parent.height
             spacing: 6
-
-            Rectangle {
-                anchors.verticalCenter: parent.verticalCenter
-                width: 34
-                height: 8
-                radius: 4
-                color: root.bar ? Qt.darker(root.bar.background, 1.2) : "#222222"
-
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width * barItem.barFrac
-                    height: parent.height
-                    radius: 4
-                    color: root.bar ? root.bar.foreground : "#f8f8f2"
-                }
-
-            }
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
@@ -521,7 +483,6 @@ function _dateLabel(evt, o, upcoming, anchor) {
     QtObject {
         id: barItem
 
-        property real barFrac: 0
         property string barName: "no events"
         property string barCount: ""
     }

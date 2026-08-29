@@ -38,22 +38,6 @@ TestCase {
         return res;
     }
 
-    function _fractionOf(evt, now) {
-        var o = _occurrences(evt, now);
-        var span = o.next - o.prev;
-        if (span <= 0)
-            return 1;
-
-        var f = (_dayIndex(now) - o.prev) / span;
-        if (f < 0)
-            f = 0;
-
-        if (f > 1)
-            f = 1;
-
-        return f;
-    }
-
     function _parseEvents(arr) {
         if (!arr || typeof arr !== "object" || arr.length === undefined)
             return [];
@@ -170,10 +154,6 @@ function _dateLabel(evt, o, now, upcoming, anchor) {
         return e;
     }
 
-    function _approx(a, b, eps) {
-        return Math.abs(a - b) <= (eps || 0.0001);
-    }
-
     function test_recurringBirthdayThisYear() {
         var now = new Date(2026, 5, 5, 12, 0, 0);
         var bday = {
@@ -205,32 +185,6 @@ function _dateLabel(evt, o, now, upcoming, anchor) {
         verify(o.passed === false);
     }
 
-    function test_recurringFillResetsAfterOccurrence() {
-        var now = new Date(2026, 11, 20, 9, 0, 0);
-        var bday = {
-            "id": "e",
-            "name": "B",
-            "month": 12,
-            "day": 12,
-            "year": 0,
-            "repeats": true
-        };
-        verify(_fractionOf(bday, now) < 0.05);
-    }
-
-    function test_recurringFillApproachesFullBeforeNext() {
-        var now = new Date(2027, 11, 10, 9, 0, 0);
-        var bday = {
-            "id": "e",
-            "name": "B",
-            "month": 12,
-            "day": 12,
-            "year": 0,
-            "repeats": true
-        };
-        verify(_fractionOf(bday, now) > 0.99);
-    }
-
     function test_oneOffUpcomingNotPassed() {
         var now = new Date(2026, 5, 5, 12, 0, 0);
         var deadline = {
@@ -243,19 +197,6 @@ function _dateLabel(evt, o, now, upcoming, anchor) {
         };
         var od = _occurrences(deadline, now);
         verify(od.passed === false);
-    }
-
-    function test_oneOffFutureFractionInBounds() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var deadline = {
-            "id": "d",
-            "name": "D",
-            "month": 10,
-            "day": 1,
-            "year": 2026,
-            "repeats": false
-        };
-        verify(_fractionOf(deadline, now) > 0 && _fractionOf(deadline, now) < 1);
     }
 
     function test_oneOffPastCountsUp() {
@@ -414,41 +355,6 @@ function _dateLabel(evt, o, now, upcoming, anchor) {
         var cp = _countOf(past, now);
         verify(/^4d ago$/.test(cp.text));
         verify(cp.upcoming === false);
-    }
-
-    function test_fractionClampedToZeroOne() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var deadline = {
-            "id": "d",
-            "name": "D",
-            "month": 10,
-            "day": 1,
-            "year": 2026,
-            "repeats": false
-        };
-        var past = {
-            "id": "p",
-            "name": "P",
-            "month": 6,
-            "day": 1,
-            "year": 2026,
-            "repeats": false
-        };
-        verify(_fractionOf(deadline, now) <= 1);
-        verify(_fractionOf(past, now) <= 1);
-    }
-
-    function test_passedEventFractionEqualsOne() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var past = {
-            "id": "p",
-            "name": "P",
-            "month": 6,
-            "day": 1,
-            "year": 2026,
-            "repeats": false
-        };
-        verify(_approx(_fractionOf(past, now), 1));
     }
 
     function test_parseEventsKeepsOnlyFirstEvent() {
