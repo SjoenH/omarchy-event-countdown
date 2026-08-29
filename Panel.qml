@@ -190,6 +190,17 @@ Panel {
         return root.hostWidget ? root.hostWidget.fractionOf(e) : 0;
     }
 
+    function monthOptions() {
+        var loc = Qt.locale();
+        var out = [];
+        for (var m = 1; m <= 12; m++)
+            out.push({
+                "value": String(m),
+                "label": loc.monthName(m - 1, Locale.LongFormat)
+            });
+        return out;
+    }
+
     function countOf(e) {
         return root.hostWidget ? root.hostWidget.countOf(e) : {
             "text": "",
@@ -321,31 +332,99 @@ Panel {
 
                     }
 
-                    Column {
+                    Row {
                         width: parent.width
-                        spacing: Style.space(2)
+                        spacing: Style.space(8)
 
-                        Text {
-                            text: "Date"
-                            color: Qt.darker(root.barForeground, 1.4)
-                            font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                            font.pixelSize: Style.font.caption
+                        Column {
+                            width: !root.edRepeats ? (parent.width - Style.space(16)) / 3 : (parent.width - Style.space(8)) / 2
+                            spacing: Style.space(2)
+
+                            Text {
+                                text: "Month"
+                                color: Qt.darker(root.barForeground, 1.4)
+                                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                                font.pixelSize: Style.font.caption
+                            }
+
+                            Dropdown {
+                                width: parent.width
+                                showLabel: false
+                                value: String(root.edMonth)
+                                options: root.monthOptions()
+                                foreground: root.barForeground
+                                accent: Color.accent
+                                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                                onChanged: function(v) {
+                                    root.edMonth = parseInt(v, 10);
+                                    root.applyEditors();
+                                }
+                            }
+
                         }
 
-                        DatePicker {
-                            width: parent.width
-                            year: root.edYear
-                            month: root.edMonth
-                            day: root.edDay
-                            foreground: root.barForeground
-                            accent: Color.accent
-                            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                            onPicked: function(y, m, d) {
-                                root.edYear = y;
-                                root.edMonth = m;
-                                root.edDay = d;
-                                root.applyEditors();
+                        Column {
+                            width: !root.edRepeats ? (parent.width - Style.space(16)) / 3 : (parent.width - Style.space(8)) / 2
+                            spacing: Style.space(2)
+
+                            Text {
+                                text: "Day"
+                                color: Qt.darker(root.barForeground, 1.4)
+                                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                                font.pixelSize: Style.font.caption
                             }
+
+                            NumberField {
+                                width: parent.width
+                                fieldWidth: parent.width
+                                value: root.edDay
+                                from: 1
+                                to: 31
+                                stepSize: 1
+                                foreground: root.barForeground
+                                accent: Color.accent
+                                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                                onModified: function(v) {
+                                    root.edDay = v;
+                                    root.applyEditors();
+                                }
+                            }
+
+                        }
+
+                        Column {
+                            width: (parent.width - Style.space(16)) / 3
+                            spacing: Style.space(2)
+                            visible: !root.edRepeats
+
+                            Text {
+                                text: "Year"
+                                color: Qt.darker(root.barForeground, 1.4)
+                                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                                font.pixelSize: Style.font.caption
+                            }
+
+                            NumberField {
+                                width: parent.width
+                                fieldWidth: parent.width
+                                value: root.edYear
+                                from: 1
+                                to: 9999
+                                stepSize: 1
+                                foreground: root.barForeground
+                                accent: Color.accent
+                                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                                // Plain digits: the kit SpinBox formats through the
+                                // locale, which turns a year into "2,026".
+                                Component.onCompleted: field.textFromValue = function(value, locale) {
+                                    return String(value);
+                                }
+                                onModified: function(v) {
+                                    root.edYear = v;
+                                    root.applyEditors();
+                                }
+                            }
+
                         }
 
                     }
