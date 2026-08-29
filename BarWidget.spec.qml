@@ -3,7 +3,7 @@ import QtTest 1.2
 
 TestCase {
     function _dayIndex(d) {
-        return Math.floor(d.getTime() / 8.64e+07);
+        return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 8.64e+07;
     }
 
     function _ydate(year, month, day) {
@@ -54,15 +54,105 @@ TestCase {
         return f;
     }
 
-    function _countOf(evt, now) {
+    function _parseEvents(arr) {
+        if (!arr || typeof arr !== "object" || arr.length === undefined)
+            return [];
+
+        var out = [];
+        for (var i = 0; i < arr.length; i++) {
+            var e = arr[i];
+            if (!e || typeof e !== "object")
+                continue;
+
+            var m = parseInt(e.month, 10), d = parseInt(e.day, 10);
+            if (isNaN(m) || isNaN(d))
+                continue;
+
+            out.push({
+                "id": e.id,
+                "name": String(e.name || ""),
+                "month": m,
+                "day": d,
+                "year": parseInt(e.year, 10) || 0,
+                "repeats": e.repeats === true
+            });
+        }
+        return out;
+    }
+
+    function _countOf(evt, now, precision, mode) {
         var o = _occurrences(evt, now);
-        var days = Math.abs(o.next - _dayIndex(now));
-        var text = o.passed ? (days === 0 ? "today" : days + "d ago") : (days === 0 ? "today" : "in " + days + "d");
+        var t = _dayIndex(now);
+        var m = mode !== undefined ? mode : "both";
+        var p = precision !== undefined ? precision : "units";
+        var days, upcoming, anchor = o.next;
+        if (m === "countup") {
+            if (evt.repeats) {
+                anchor = o.prev;
+                days = t - o.prev;
+                upcoming = false;
+            } else {
+                days = Math.abs(o.next - t);
+                upcoming = !o.passed;
+                anchor = o.next;
+            }
+        } else {
+            days = Math.abs(o.next - t);
+            upcoming = !o.passed;
+            anchor = o.next;
+        }
+        if (days < 0)
+            days = 0;
+
+        var text;
+        if (p === "date" && days >= 7)
+            text = _dateLabel(evt, o, now, upcoming, anchor);
+        else
+            text = _unitText(days, upcoming, p);
+
         return {
             "text": text,
-            "upcoming": !o.passed,
+            "upcoming": upcoming,
             "days": days
         };
+    }
+
+function _dateLabel(evt, o, now, upcoming, anchor) {
+        var arrow = upcoming ? "\u2192 " : "\u2190 ";
+        var idx = anchor === undefined ? o.next : anchor;
+        var y = new Date(idx * 8.64e+07).getFullYear();
+        var yNow = now.getFullYear();
+        return arrow + _monthDayName(evt) + (y !== yNow ? " " + y : "");
+    }
+
+    function _monthDayName(evt) {
+        var names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        var mn = names[(evt.month - 1 + 12) % 12] || evt.month;
+        return mn + " " + evt.day;
+    }
+
+    function _unitText(days, upcoming, precision) {
+        if (days === 0)
+            return "today";
+
+        if (days === 1)
+            return upcoming ? "tomorrow" : "yesterday";
+
+        var prefix = upcoming ? "in " : "";
+        var suffix = upcoming ? "" : " ago";
+        if ((precision || "units") === "days")
+            return prefix + days + "d" + suffix;
+
+        if (days < 7)
+            return prefix + days + "d" + suffix;
+
+        if (days < 30)
+            return prefix + Math.round(days / 7) + "w" + suffix;
+
+        if (days < 365)
+            return prefix + Math.min(11, Math.round(days / 30)) + "mo" + suffix;
+
+        return prefix + Math.round(days / 365) + "y" + suffix;
     }
 
     function _approx(a, b, eps) {
@@ -166,8 +256,41 @@ TestCase {
         var op = _occurrences(past, now);
         verify(op.passed === true);
         var cp = _countOf(past, now);
-        verify(/^5d ago$/.test(cp.text));
+        verify(/^4d ago$/.test(cp.text));
         verify(cp.upcoming === false);
+    }
+
+    function test_countOfRecurringPastCountsUp() {
+        var now = new Date(2026, 5, 5, 12, 0, 0);
+        var bday = {
+            "id": "e",
+            "name": "B",
+            "month": 1,
+            "day": 1,
+            "year": 0,
+            "repeats": true
+        };
+        var c = _countOf(bday, now, "units", "countup");
+        verify(c.upcoming === false);
+        var expected = _dayIndex(now) - _dayIndex(new Date(2026, 0, 1));
+        verify(c.days === expected);
+        verify(/mo ago$/.test(c.text));
+    }
+
+    function test_countOfRecurringAlwaysCountsFromLastInCountup() {
+        var now = new Date(2026, 5, 5, 12, 0, 0);
+        var bday = {
+            "id": "e",
+            "name": "B",
+            "month": 12,
+            "day": 12,
+            "year": 0,
+            "repeats": true
+        };
+        var c = _countOf(bday, now, "units", "countup");
+        verify(c.upcoming === false);
+        var expected = _dayIndex(now) - _dayIndex(new Date(2025, 11, 12));
+        verify(c.days === expected);
     }
 
     function test_countOfRecurringDisplaysInXd() {
@@ -180,9 +303,87 @@ TestCase {
             "year": 0,
             "repeats": true
         };
-        var c = _countOf(bday, now);
-        verify(/in \d+d$/.test(c.text));
+        var c = _countOf(bday, now, "units");
+        verify(c.text === "in 6mo");
         verify(c.upcoming === true);
+    }
+
+    function test_precisionExactKeepsDays() {
+        var now = new Date(2026, 5, 5, 12, 0, 0);
+        var bday = {
+            "id": "e",
+            "name": "B",
+            "month": 12,
+            "day": 12,
+            "year": 0,
+            "repeats": true
+        };
+        var c = _countOf(bday, now, "days");
+        verify(c.text === "in 190d");
+    }
+
+    function test_precisionDateShowsDate() {
+        var now = new Date(2026, 5, 5, 12, 0, 0);
+        var bday = {
+            "id": "e",
+            "name": "B",
+            "month": 12,
+            "day": 12,
+            "year": 0,
+            "repeats": true
+        };
+        var c = _countOf(bday, now, "date");
+        verify(c.text === "→ Dec 12");
+    }
+
+    function test_precisionUnitsWeeks() {
+        var now = new Date(2026, 5, 5, 12, 0, 0);
+        var soon = {
+            "id": "s",
+            "name": "S",
+            "month": 6,
+            "day": 15,
+            "year": 2026,
+            "repeats": false
+        };
+        var d = _countOf(soon, now, "units");
+        verify(d.text === "in 1w");
+    }
+
+    function test_precisionUnitsYears() {
+        var now = new Date(2026, 5, 5, 12, 0, 0);
+        var far = {
+            "id": "f",
+            "name": "F",
+            "month": 7,
+            "day": 5,
+            "year": 2027,
+            "repeats": false
+        };
+        var c = _countOf(far, now, "units");
+        verify(c.text === "in 1y");
+    }
+
+    function test_countOfTodayAndTomorrow() {
+        var now = new Date(2026, 5, 5, 12, 0, 0);
+        var today = {
+            "id": "t",
+            "name": "T",
+            "month": 6,
+            "day": 5,
+            "year": 0,
+            "repeats": true
+        };
+        var tomorrow = {
+            "id": "m",
+            "name": "M",
+            "month": 6,
+            "day": 6,
+            "year": 0,
+            "repeats": true
+        };
+        verify(_countOf(today, now).text === "today");
+        verify(_countOf(tomorrow, now).text === "tomorrow");
     }
 
     function test_countOfOneOffPassedDisplaysDaysAgo() {
@@ -196,7 +397,7 @@ TestCase {
             "repeats": false
         };
         var cp = _countOf(past, now);
-        verify(/^5d ago$/.test(cp.text));
+        verify(/^4d ago$/.test(cp.text));
         verify(cp.upcoming === false);
     }
 
@@ -233,6 +434,33 @@ TestCase {
             "repeats": false
         };
         verify(_approx(_fractionOf(past, now), 1));
+    }
+
+    function test_parseEventsAcceptsListLikeNonArray() {
+        var listLike = {
+            "length": 2,
+            "0": {
+                "id": "a",
+                "name": "My Birthday",
+                "month": 1,
+                "day": 1,
+                "year": 0,
+                "repeats": true
+            },
+            "1": {
+                "id": "b",
+                "name": "",
+                "month": 1,
+                "day": 1,
+                "year": 0,
+                "repeats": true
+            }
+        };
+        verify(Array.isArray(listLike) === false);
+        var out = _parseEvents(listLike);
+        verify(out.length === 2);
+        verify(out[0].name === "My Birthday");
+        verify(out[1].repeats === true);
     }
 
     function test_nearestEventBothModes() {

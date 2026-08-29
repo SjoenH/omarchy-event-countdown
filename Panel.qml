@@ -19,6 +19,7 @@ Panel {
     property int selIndex: -1
     property var workEvents: []
     property string edMode: "both"
+    property string edPrecision: "units"
     property string edName: ""
     property int edMonth: 1
     property int edDay: 1
@@ -30,6 +31,10 @@ Panel {
         return root.hostWidget ? (root.hostWidget.mode || "both") : "both";
     }
 
+    function precisionW() {
+        return root.hostWidget ? (root.hostWidget.precision || "units") : "units";
+    }
+
     function eventsW() {
         return root.hostWidget ? (root.hostWidget.events || []) : [];
     }
@@ -37,6 +42,7 @@ Panel {
     function syncFromWidget() {
         root.workEvents = root.deepCopyEvents(root.eventsW());
         root.edMode = root.modeW();
+        root.edPrecision = root.precisionW();
         if (root.selIndex >= root.workEvents.length)
             root.selIndex = -1;
 
@@ -144,15 +150,27 @@ Panel {
         });
     }
 
-    function switchMode(mode) {
+function switchMode(mode) {
         if (mode === root.edMode)
-            return ;
+            return;
 
         root.edMode = mode;
         if (root.hostWidget)
             root.hostWidget.persist({
-            "mode": mode
-        });
+                "mode": mode
+            });
+
+    }
+
+    function switchPrecision(precision) {
+        if (precision === root.edPrecision)
+            return;
+
+        root.edPrecision = precision;
+        if (root.hostWidget)
+            root.hostWidget.persist({
+                "precision": precision
+            });
 
     }
 
@@ -299,6 +317,37 @@ Panel {
                         fontSize: Style.font.caption
                         onChanged: function(mode) {
                             root.switchMode(mode);
+                        }
+                    }
+
+                    Text {
+                        text: "Precision"
+                        color: Qt.darker(root.barForeground, 1.4)
+                        font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                    }
+
+                    ButtonGroup {
+                        width: parent.width
+                        options: [{
+                            "value": "days",
+                            "label": "Exact days"
+                        }, {
+                            "value": "units",
+                            "label": "Fuzzy units"
+                        }, {
+                            "value": "date",
+                            "label": "Show date"
+                        }]
+                        value: root.edPrecision
+                        foreground: root.barForeground
+                        background: Color.background
+                        accent: Color.accent
+                        fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                        fontSize: Style.font.caption
+                        onChanged: function(precision) {
+                            root.switchPrecision(precision);
                         }
                     }
 

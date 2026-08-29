@@ -13,6 +13,7 @@ BarWidget {
     // === 3. PROPERTIES ===
     // 3a. State properties
     property string mode: "both"
+    property string precision: "units"
     property var events: []
     // 3b. State/readonly
     readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
@@ -45,9 +46,13 @@ BarWidget {
         var entry = typeof found === "object" ? found : {
         };
         var nextMode = entry["mode"] !== undefined ? String(entry["mode"]) : root.mode;
+        var nextPrecision = String(entry["precision"] || root.precision);
         var nextEvents = root.parseEvents(entry["events"]);
         if (nextMode !== root.mode)
             root.mode = nextMode;
+
+        if (nextPrecision === "days" || nextPrecision === "units" || nextPrecision === "date")
+            root.precision = nextPrecision;
 
         root.events = nextEvents;
     }
@@ -72,7 +77,7 @@ BarWidget {
 
     // === 9. FUNCTIONS (private first, then public) ===
     function _dayIndex(d) {
-        return Math.floor(d.getTime() / 8.64e+07);
+        return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 8.64e+07;
     }
 
     function _ydate(year, month, day) {
@@ -83,10 +88,10 @@ BarWidget {
         return _dayIndex(new Date());
     }
 
-    function _occurrences(evt) {
-        var t = _todayIndex();
+    function _occurrences(evt, now) {
+        var t = now ? _dayIndex(now) : _todayIndex();
         var m = evt.month, d = evt.day;
-        var yNow = new Date().getFullYear();
+        var yNow = (now || new Date()).getFullYear();
         var res = {
             "prev": 0,
             "next": 0,
@@ -130,19 +135,77 @@ BarWidget {
         return f;
     }
 
-    function _countOf(evt) {
-        var o = _occurrences(evt);
-        var days = Math.abs(o.next - _todayIndex());
+    function _countOf(evt, now, precision, mode) {
+        var o = _occurrences(evt, now);
+        var t = now ? _dayIndex(now) : _todayIndex();
+        var m = mode !== undefined ? mode : root.mode;
+        var p = precision !== undefined ? precision : root.precision;
+        var days, upcoming, anchor = o.next;
+        if (m === "countup") {
+            // Count up from the most recent occurrence that lies in the past.
+            // A repeating event always has a prior instance (this year or last
+            // year), so it is eligible once the current-year date has passed;
+            // a one-off only qualifies after it has actually happened.
+            if (evt.repeats) {
+                anchor = o.prev;
+                days = t - o.prev;
+                upcoming = false;
+            } else {
+                days = Math.abs(o.next - t);
+                upcoming = !o.passed;
+                anchor = o.next;
+            }
+        } else {
+            days = Math.abs(o.next - t);
+            upcoming = !o.passed;
+            anchor = o.next;
+        }
+        if (days < 0)
+            days = 0;
+
         var text;
-        if (o.passed)
-            text = days === 0 ? "today" : (days + "d ago");
+        if (p === "date" && days >= 7)
+            text = _dateLabel(evt, o, upcoming, anchor);
         else
-            text = days === 0 ? "today" : ("in " + days + "d");
+            text = _unitText(days, upcoming, p);
+
         return {
             "text": text,
-            "upcoming": !o.passed,
+            "upcoming": upcoming,
             "days": days
         };
+    }
+
+function _dateLabel(evt, o, upcoming, anchor) {
+        var arrow = upcoming ? "\u2192 " : "\u2190 ";
+        var idx = anchor === undefined ? o.next : anchor;
+        var y = new Date(idx * 8.64e+07).getFullYear();
+        var yNow = new Date().getFullYear();
+        return arrow + _monthDayName(evt) + (y !== yNow ? " " + y : "");
+    }
+
+    function _unitText(days, upcoming, precision) {
+        if (days === 0)
+            return "today";
+
+        if (days === 1)
+            return upcoming ? "tomorrow" : "yesterday";
+
+        var prefix = upcoming ? "in " : "";
+        var suffix = upcoming ? "" : " ago";
+        if (precision === "days")
+            return prefix + days + "d" + suffix;
+
+        if (days < 7)
+            return prefix + days + "d" + suffix;
+
+        if (days < 30)
+            return prefix + Math.round(days / 7) + "w" + suffix;
+
+        if (days < 365)
+            return prefix + Math.min(11, Math.round(days / 30)) + "mo" + suffix;
+
+        return prefix + Math.round(days / 365) + "y" + suffix;
     }
 
     function _nearestEvent() {
@@ -214,7 +277,7 @@ BarWidget {
     }
 
     function _parseEvents(arr) {
-        if (!Array.isArray(arr))
+        if (!arr || typeof arr !== "object" || arr.length === undefined)
             return [];
 
         var out = [];
@@ -281,6 +344,7 @@ BarWidget {
         var entry = {
             "id": root.moduleName,
             "mode": root.mode,
+            "precision": root.precision,
             "events": padEvents
         };
         root.settings = entry;
@@ -351,21 +415,37 @@ BarWidget {
         root.syncPanel();
     }
     onConfiguredChanged: root.refresh()
-    onBarChanged: injectPanel()
+    onBarChanged: {
+        injectPanel();
+        reboot();
+    }
     Component.onCompleted: {
         reboot();
         refreshTimer.start();
         Qt.callLater(root.refresh);
     }
     onSettingsChanged: {
-        // Only fall back to the live layout when the host pushed nothing. Real
-        // pushes carry the entry's mode/events; blindly re-reading the layout
-        // on every push can rescore a freshly saved month with a stale in-memory
-        // copy the shell has not re-applied yet.
+        // A real push carries mode/events/precision and is authoritative. Only
+        // fall back to the live layout when the host pushed nothing (injection
+        // can race widget construction); the layout would still be the stale
+        // in-memory copy until applySettingsDelta re-applies it.
         var s = root.settings;
-        if (!s || typeof s !== "object" || Object.keys(s).length === 0)
+        if (!s || typeof s !== "object" || Object.keys(s).length === 0) {
             reboot();
+            return;
+        }
+        if (s["mode"] !== undefined)
+            root.mode = String(s["mode"]);
 
+        if (s["events"] !== undefined)
+            root.events = root.parseEvents(s["events"]);
+
+        if (s["precision"] !== undefined) {
+            var p = String(s["precision"]);
+            if (p === "days" || p === "units" || p === "date")
+                root.precision = p;
+
+        }
     }
 
     // === 6. CHILD OBJECTS ===
