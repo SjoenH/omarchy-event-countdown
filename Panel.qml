@@ -62,32 +62,37 @@ Panel {
         if (!e)
             return ;
 
-        if (root.edName !== e.name) {
+        if (root.edName !== e.name)
             e.name = root.edName;
-            root.dirty();
-        }
-        if (root.edMonth !== e.month) {
+        if (root.edMonth !== e.month)
             e.month = root.edMonth;
-            root.dirty();
-        }
-        if (root.edDay !== e.day) {
+        if (root.edDay !== e.day)
             e.day = root.edDay;
-            root.dirty();
-        }
-        if (root.edYear !== e.year) {
+        if (root.edYear !== e.year)
             e.year = root.edYear;
-            root.dirty();
-        }
-        if (root.edRepeats !== e.repeats) {
+        if (root.edRepeats !== e.repeats)
             e.repeats = root.edRepeats;
-            root.dirty();
-        }
     }
 
-    function dirty() {
-        if (root.hostWidget && root.workEvent)
-            root.hostWidget.previewEvents([root.workEvent]);
+    // Every editor change applies and persists right away; there is no
+    // Save step. A blank name is the "no event" state and clears the
+    // slot, so removal is just emptying the name field.
+    function applyChange() {
+        var e = root.workEvent;
+        if (!e)
+            return ;
 
+        root.applyEditors();
+        if (e.name.trim() === "") {
+            if (root.hostWidget)
+                root.hostWidget.persist({
+                    "events": []
+                });
+            return ;
+        }
+
+        if (root.canCommit())
+            root.commit();
     }
 
     function canCommit() {
@@ -153,16 +158,6 @@ Panel {
             e.id = root.hostWidget.newId();
             root.workEvent = e;
             root.loadEvent();
-            root.dirty();
-        }
-    }
-
-    function removeEvent() {
-        if (root.hostWidget) {
-            root.workEvent = null;
-            root.hostWidget.persist({
-                "events": []
-            });
         }
     }
 
@@ -186,10 +181,6 @@ Panel {
         return false;
     }
 
-    function fracOf(e) {
-        return root.hostWidget ? root.hostWidget.fractionOf(e) : 0;
-    }
-
     function monthOptions() {
         var loc = Qt.locale();
         var out = [];
@@ -199,21 +190,6 @@ Panel {
                 "label": loc.monthName(m - 1, Locale.LongFormat)
             });
         return out;
-    }
-
-    function countOf(e) {
-        return root.hostWidget ? root.hostWidget.countOf(e) : {
-            "text": "",
-            "upcoming": true
-        };
-    }
-
-    function nameOf(e) {
-        return root.hostWidget ? root.hostWidget.monthDayName(e) : "";
-    }
-
-    function barBg() {
-        return root.bar ? root.bar.background : Color.background;
     }
 
     objectName: "eventCountdownPanel"
@@ -324,7 +300,13 @@ Panel {
                             font.pixelSize: Style.font.body
                             onTextChanged: {
                                 root.edName = text;
-                                root.applyEditors();
+                                // Keystrokes stay in preview; the name flushes
+                                // on close or with the next discrete change.
+                                // Clearing the name clears the event now.
+                                if (text.trim() === "")
+                                    root.applyChange();
+                                else
+                                    root.applyEditors();
                             }
                             onAccepted: root.close()
                             Keys.onEscapePressed: root.close()
@@ -357,7 +339,7 @@ Panel {
                                 fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
                                 onChanged: function(v) {
                                     root.edMonth = parseInt(v, 10);
-                                    root.applyEditors();
+                                    root.applyChange();
                                 }
                             }
 
@@ -386,7 +368,7 @@ Panel {
                                 fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
                                 onModified: function(v) {
                                     root.edDay = v;
-                                    root.applyEditors();
+                                    root.applyChange();
                                 }
                             }
 
@@ -421,7 +403,7 @@ Panel {
                                 }
                                 onModified: function(v) {
                                     root.edYear = v;
-                                    root.applyEditors();
+                                    root.applyChange();
                                 }
                             }
 
@@ -442,37 +424,8 @@ Panel {
                                 var t = new Date();
                                 root.edYear = t.getFullYear();
                             }
-                            root.applyEditors();
+                            root.applyChange();
                         }
-                    }
-
-                    Row {
-                        width: parent.width
-                        spacing: Style.space(8)
-
-                        Button {
-                            width: (parent.width - Style.space(8)) / 2
-                            text: "Save"
-                            focusable: true
-                            foreground: root.barForeground
-                            accent: Color.accent
-                            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                            fontSize: Style.font.body
-                            enabled: root.canCommit()
-                            onClicked: root.commit()
-                        }
-
-                        Button {
-                            width: (parent.width - Style.space(8)) / 2
-                            text: "Remove"
-                            focusable: true
-                            foreground: root.bar.urgent
-                            accent: Color.accent
-                            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                            fontSize: Style.font.body
-                            onClicked: root.removeEvent()
-                        }
-
                     }
 
                 }
