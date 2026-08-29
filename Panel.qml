@@ -227,16 +227,6 @@ Panel {
                 spacing: Style.space(12)
                 padding: Style.space(4)
 
-                Text {
-                    width: parent.width
-                    text: "Event Countdown"
-                    color: root.barForeground
-                    font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                    font.pixelSize: Style.font.subtitle
-                    font.bold: true
-                }
-
-
                 // --- Single event editor ---
                 Column {
                     width: parent.width
@@ -270,14 +260,6 @@ Panel {
                     width: parent.width
                     spacing: Style.space(8)
                     visible: root.workEvent !== null
-
-                    Text {
-                        text: "Edit event"
-                        color: Qt.darker(root.barForeground, 1.4)
-                        font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                        font.pixelSize: Style.font.caption
-                        font.bold: true
-                    }
 
                     Column {
                         width: parent.width
