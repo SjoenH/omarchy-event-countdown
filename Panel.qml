@@ -254,7 +254,7 @@ Panel {
                     spacing: Style.space(6)
 
                     Text {
-                        text: "Mode"
+                        text: "Count direction"
                         color: Qt.darker(root.barForeground, 1.4)
                         font.family: root.bar ? root.bar.fontFamily : Style.font.family
                         font.pixelSize: Style.font.caption
@@ -289,7 +289,7 @@ Panel {
                     }
 
                     Text {
-                        text: "Precision"
+                        text: "Format"
                         color: Qt.darker(root.barForeground, 1.4)
                         font.family: root.bar ? root.bar.fontFamily : Style.font.family
                         font.pixelSize: Style.font.caption
