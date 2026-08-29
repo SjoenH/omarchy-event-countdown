@@ -249,81 +249,6 @@ Panel {
                     font.bold: true
                 }
 
-                Column {
-                    width: parent.width
-                    spacing: Style.space(6)
-
-                    Text {
-                        text: "Count direction"
-                        color: Qt.darker(root.barForeground, 1.4)
-                        font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                        font.pixelSize: Style.font.caption
-                        font.bold: true
-                    }
-
-                    ExplainDropdown {
-                        width: parent.width
-                        options: [{
-                            "value": "countdown",
-                            "label": "Count down",
-                            "description": "until it happens",
-                            "explanation": "Counts down the time remaining until the next occurrence of the event."
-                        }, {
-                            "value": "countup",
-                            "label": "Count up",
-                            "description": "since it happened",
-                            "explanation": "Counts up the time elapsed since the last occurrence, for past events."
-                        }, {
-                            "value": "both",
-                            "label": "Both",
-                            "description": "either way",
-                            "explanation": "Counts down when the event is upcoming, and up once it has passed."
-                        }]
-                        value: root.edMode
-                        foreground: root.barForeground
-                        accent: Color.accent
-                        fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                        onChanged: function(mode) {
-                            root.switchMode(mode);
-                        }
-                    }
-
-                    Text {
-                        text: "Format"
-                        color: Qt.darker(root.barForeground, 1.4)
-                        font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                        font.pixelSize: Style.font.caption
-                        font.bold: true
-                    }
-
-                    ExplainDropdown {
-                        width: parent.width
-                        options: [{
-                            "value": "days",
-                            "label": "Exact days",
-                            "description": "e.g. 34d",
-                            "explanation": "Always counts in whole days (e.g. 34d)."
-                        }, {
-                            "value": "units",
-                            "label": "Fuzzy units",
-                            "description": "e.g. 3mo",
-                            "explanation": "Rounds to days, weeks, months, or years (e.g. 3mo) for easier reading."
-                        }, {
-                            "value": "date",
-                            "label": "Show date",
-                            "description": "e.g. Jan 1",
-                            "explanation": "Shows the event's date itself (e.g. Jan 1) instead of a count."
-                        }]
-                        value: root.edPrecision
-                        foreground: root.barForeground
-                        accent: Color.accent
-                        fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                        onChanged: function(precision) {
-                            root.switchPrecision(precision);
-                        }
-                    }
-
-                }
 
                 // --- Single event editor ---
                 Column {
@@ -521,7 +446,7 @@ Panel {
 
                         Button {
                             width: (parent.width - Style.space(8)) / 2
-                            text: "Delete"
+                            text: "Remove"
                             focusable: true
                             foreground: root.bar.urgent
                             accent: Color.accent
@@ -530,6 +455,83 @@ Panel {
                             onClicked: root.removeEvent()
                         }
 
+                    }
+
+                }
+
+                Column {
+                    width: parent.width
+                    spacing: Style.space(6)
+                    visible: root.workEvent !== null
+
+                    Text {
+                        text: "Count direction"
+                        color: Qt.darker(root.barForeground, 1.4)
+                        font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                    }
+
+                    ExplainDropdown {
+                        width: parent.width
+                        options: [{
+                            "value": "countdown",
+                            "label": "Count down",
+                            "description": "until it happens",
+                            "explanation": "Counts down the time remaining until the next occurrence of the event."
+                        }, {
+                            "value": "countup",
+                            "label": "Count up",
+                            "description": "since it happened",
+                            "explanation": "Counts up the time elapsed since the last occurrence, for past events."
+                        }, {
+                            "value": "both",
+                            "label": "Both",
+                            "description": "either way",
+                            "explanation": "Counts down when the event is upcoming, and up once it has passed."
+                        }]
+                        value: root.edMode
+                        foreground: root.barForeground
+                        accent: Color.accent
+                        fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                        onChanged: function(mode) {
+                            root.switchMode(mode);
+                        }
+                    }
+
+                    Text {
+                        text: "Format"
+                        color: Qt.darker(root.barForeground, 1.4)
+                        font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                    }
+
+                    ExplainDropdown {
+                        width: parent.width
+                        options: [{
+                            "value": "days",
+                            "label": "Exact days",
+                            "description": "e.g. 34d",
+                            "explanation": "Always counts in whole days (e.g. 34d)."
+                        }, {
+                            "value": "units",
+                            "label": "Fuzzy units",
+                            "description": "e.g. 3mo",
+                            "explanation": "Rounds to days, weeks, months, or years (e.g. 3mo) for easier reading."
+                        }, {
+                            "value": "date",
+                            "label": "Show date",
+                            "description": "e.g. Jan 1",
+                            "explanation": "Shows the event's date itself (e.g. Jan 1) instead of a count."
+                        }]
+                        value: root.edPrecision
+                        foreground: root.barForeground
+                        accent: Color.accent
+                        fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                        onChanged: function(precision) {
+                            root.switchPrecision(precision);
+                        }
                     }
 
                 }
