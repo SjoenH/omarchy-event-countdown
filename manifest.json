@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "no.koka.event-countdown",
   "name": "Event Countdown",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "koka.no",
   "license": "MIT",
   "description": "Count down or up to birthdays, anniversaries, and deadlines from the bar. Recurring or one-off events.",
