@@ -119,7 +119,14 @@ BarWidget {
     onBarChanged: injectPanel()
 
     Component.onCompleted: { reboot(); refreshTimer.start(); Qt.callLater(root.refresh) }
-    onSettingsChanged: reboot()
+    onSettingsChanged: {
+        // Only fall back to the live layout when the host pushed nothing. Real
+        // pushes carry the entry's mode/events; blindly re-reading the layout
+        // on every push can rescore a freshly saved month with a stale in-memory
+        // copy the shell has not re-applied yet.
+        var s = root.settings
+        if (!s || typeof s !== "object" || Object.keys(s).length === 0) reboot()
+    }
 
     // Re-read this widget's layout entry straight from the bar host. The host
     // technically pushes the same data through `settings`, but injection can
@@ -282,11 +289,12 @@ BarWidget {
     function refresh() { _refresh() }
 
     function persist(patch) {
+        var padEvents = root.events
         if (patch) {
             if (patch.mode !== undefined) root.mode = patch.mode
-            if (patch.events !== undefined) root.events = parseEvents(patch.events)
+            if (patch.events !== undefined) { padEvents = parseEvents(patch.events); root.events = padEvents }
         }
-        var entry = { id: root.moduleName, mode: root.mode, events: root.events }
+        var entry = { id: root.moduleName, mode: root.mode, events: padEvents }
         root.settings = entry
         if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function") {
             root.bar.shell.updateEntryInline(root.moduleName, entry)
