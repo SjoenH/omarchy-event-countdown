@@ -312,8 +312,7 @@ Panel {
 
                     Toggle {
                         width: parent.width
-                        label: "Repeats every year"
-                        description: "Off = one-off date (needs a year)"
+                        label: "Recurring event"
                         checked: root.edRepeats
                         foreground: root.barForeground
                         accent: Color.accent
@@ -390,16 +389,11 @@ Panel {
 
 
     function syncFromWidget() {
-        if (root.suppressSync) { root.suppressSync = false; return }
-        root.edMode = root.hostWidget ? root.hostWidget.mode : "both"
-        var e = root.current()
-        if (e) {
-            root.edName = e.name
-            root.edMonth = e.month
-            root.edDay = e.day
-            root.edYear = e.year
-            root.edRepeats = e.repeats
-        }
+        root.workEvents = root.deepCopyEvents(root.eventsW())
+        root.edMode = root.modeW()
+        if (root.selIndex >= root.workEvents.length) root.selIndex = -1
+        if (root.selIndex < 0 && root.workEvents.length > 0) root.selIndex = 0
+        root.loadSelection()
     }
 
     function deepCopyEvents(arr) {
@@ -469,7 +463,9 @@ Panel {
         if (root.hostWidget) {
             var e = root.hostWidget.emptyEvent()
             e.id = root.hostWidget.newId()
-            root.workEvents.push(e)
+            var next = root.workEvents.slice()
+            next.push(e)
+            root.workEvents = next
             root.selIndex = root.workEvents.length - 1
             root.loadSelection()
             root.dirty()
@@ -478,7 +474,9 @@ Panel {
 
     function removeSelected() {
         if (root.selIndex < 0 || root.selIndex >= root.workEvents.length) return
-        root.workEvents.splice(root.selIndex, 1)
+        var next = root.workEvents.slice()
+        next.splice(root.selIndex, 1)
+        root.workEvents = next
         if (root.workEvents.length === 0) root.selIndex = -1
         else if (root.selIndex >= root.workEvents.length) root.selIndex = root.workEvents.length - 1
         root.loadSelection()

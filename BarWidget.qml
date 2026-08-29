@@ -13,8 +13,8 @@ BarWidget {
 
     // === 3. PROPERTIES ===
     // 3a. State properties
-    property string mode: root.setting("mode", "both")
-    property var events: root.parseEvents(root.setting("events", []))
+    property string mode: "both"
+    property var events: []
 
     // 3b. State/readonly
     readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
@@ -118,7 +118,32 @@ BarWidget {
     onConfiguredChanged: root.refresh()
     onBarChanged: injectPanel()
 
-    Component.onCompleted: { refreshTimer.start(); Qt.callLater(root.refresh) }
+    Component.onCompleted: { reboot(); refreshTimer.start(); Qt.callLater(root.refresh) }
+    onSettingsChanged: reboot()
+
+    // Re-read this widget's layout entry straight from the bar host. The host
+    // technically pushes the same data through `settings`, but injection can
+    // race widget construction on slower shells, so deriving from the live
+    // layout is the reliable path and keeps the panel and bar in sync.
+    function reboot() {
+        if (!root.bar || typeof root.bar.layoutEntries !== "function") return
+        var found = null
+        for (var s = 0; s < 3 && !found; s++) {
+            var region = ["left", "center", "right"][s]
+            var entries = root.bar.layoutEntries(region)
+            for (var i = 0; i < entries.length; i++) {
+                var e = entries[i]
+                var id = typeof e === "object" && e ? e.id : e
+                if (id === root.moduleName) { found = e; break }
+            }
+        }
+        if (!found) return
+        var entry = typeof found === "object" ? found : {}
+        var nextMode = entry["mode"] !== undefined ? String(entry["mode"]) : root.mode
+        var nextEvents = root.parseEvents(entry["events"])
+        if (nextMode !== root.mode) root.mode = nextMode
+        root.events = nextEvents
+    }
 
     function open() { if (panelLoader.item) panelLoader.item.open() }
     function close() { if (panelLoader.item) panelLoader.item.close() }
