@@ -321,96 +321,31 @@ Panel {
 
                     }
 
-                    Row {
+                    Column {
                         width: parent.width
-                        spacing: Style.space(8)
+                        spacing: Style.space(2)
 
-                        Column {
-                            width: parent.width / 3
-                            spacing: Style.space(2)
-
-                            Text {
-                                text: "Month"
-                                color: Qt.darker(root.barForeground, 1.4)
-                                font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                                font.pixelSize: Style.font.caption
-                            }
-
-                            NumberField {
-                                width: parent.width
-                                fieldWidth: parent.width
-                                value: root.edMonth
-                                from: 1
-                                to: 12
-                                stepSize: 1
-                                foreground: root.barForeground
-                                accent: Color.accent
-                                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                                onModified: function(v) {
-                                    root.edMonth = v;
-                                    root.applyEditors();
-                                }
-                            }
-
+                        Text {
+                            text: "Date"
+                            color: Qt.darker(root.barForeground, 1.4)
+                            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                            font.pixelSize: Style.font.caption
                         }
 
-                        Column {
-                            width: parent.width / 3
-                            spacing: Style.space(2)
-
-                            Text {
-                                text: "Day"
-                                color: Qt.darker(root.barForeground, 1.4)
-                                font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                                font.pixelSize: Style.font.caption
+                        DatePicker {
+                            width: parent.width
+                            year: root.edYear
+                            month: root.edMonth
+                            day: root.edDay
+                            foreground: root.barForeground
+                            accent: Color.accent
+                            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                            onPicked: function(y, m, d) {
+                                root.edYear = y;
+                                root.edMonth = m;
+                                root.edDay = d;
+                                root.applyEditors();
                             }
-
-                            NumberField {
-                                width: parent.width
-                                fieldWidth: parent.width
-                                value: root.edDay
-                                from: 1
-                                to: 31
-                                stepSize: 1
-                                foreground: root.barForeground
-                                accent: Color.accent
-                                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                                onModified: function(v) {
-                                    root.edDay = v;
-                                    root.applyEditors();
-                                }
-                            }
-
-                        }
-
-                        Column {
-                            width: parent.width / 3
-                            spacing: Style.space(2)
-                            visible: !root.edRepeats
-
-                            Text {
-                                text: "Year"
-                                color: Qt.darker(root.barForeground, 1.4)
-                                font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                                font.pixelSize: Style.font.caption
-                            }
-
-                            NumberField {
-                                width: parent.width
-                                fieldWidth: parent.width
-                                value: root.edYear
-                                from: 1
-                                to: 9999
-                                stepSize: 1
-                                foreground: root.barForeground
-                                accent: Color.accent
-                                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                                onModified: function(v) {
-                                    root.edYear = v;
-                                    root.applyEditors();
-                                }
-                            }
-
                         }
 
                     }
@@ -424,6 +359,10 @@ Panel {
                         fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
                         onClicked: {
                             root.edRepeats = !root.edRepeats;
+                            if (!root.edRepeats && root.edYear < 1) {
+                                var t = new Date();
+                                root.edYear = t.getFullYear();
+                            }
                             root.applyEditors();
                         }
                     }
