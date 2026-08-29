@@ -263,19 +263,18 @@ Panel {
 
                     ExplainDropdown {
                         width: parent.width
-                        label: "Count direction"
                         options: [{
                             "value": "countdown",
                             "label": "Count down",
-                            "description": "Time until the event, shown for upcoming events"
+                            "description": "Time until the event"
                         }, {
                             "value": "countup",
                             "label": "Count up",
-                            "description": "Time since the event, shown for past events"
+                            "description": "Time since the event"
                         }, {
                             "value": "both",
                             "label": "Both",
-                            "description": "Count down if upcoming, up if past"
+                            "description": "Auto-picks a direction"
                         }]
                         value: root.edMode
                         foreground: root.barForeground
@@ -296,19 +295,18 @@ Panel {
 
                     ExplainDropdown {
                         width: parent.width
-                        label: "How to display the count"
                         options: [{
                             "value": "days",
                             "label": "Exact days",
-                            "description": "Always count in whole days, like \"34d\""
+                            "description": "Whole days, e.g. 34d"
                         }, {
                             "value": "units",
                             "label": "Fuzzy units",
-                            "description": "Round to days, weeks, months, or years, like \"3mo\""
+                            "description": "Rounded units, e.g. 3mo"
                         }, {
                             "value": "date",
                             "label": "Show date",
-                            "description": "Show the event's date instead, like \"Jan 1\""
+                            "description": "Shows the date"
                         }]
                         value: root.edPrecision
                         foreground: root.barForeground
