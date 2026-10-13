@@ -1,430 +1,300 @@
-import QtQuick 2.15
-import QtTest 1.2
+import QtQuick
 
-TestCase {
-    function _dayIndex(d) {
-        return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 8.64e+07;
-    }
+// Runs against the real BarWidget.qml and Panel.qml through tests/run.sh.
+// `h` is the harness (tests/harness/Harness.qml); a test that has to wait is
+// a generator and yields the number of milliseconds to wait.
+Item {
+    id: spec
 
-    function _ydate(year, month, day) {
-        return new Date(year, month - 1, day);
-    }
+    property var h: null
+    readonly property var june5: new Date(2026, 5, 5, 12, 0, 0)
 
-    function _todayIndex() {
-        return _dayIndex(new Date());
-    }
-
-    function _occurrences(evt, now) {
-        var t = _dayIndex(now);
-        var m = evt.month, d = evt.day;
-        var yNow = now.getFullYear();
-        var res = {
-            "prev": 0,
-            "next": 0,
-            "passed": true
-        };
-        if (evt.repeats) {
-            var thisY = _dayIndex(_ydate(yNow, m, d));
-            var next = thisY >= t ? thisY : _dayIndex(_ydate(yNow + 1, m, d));
-            res.next = next;
-            res.prev = _dayIndex(_ydate(new Date(res.next * 8.64e+07).getFullYear() - 1, m, d));
-            res.passed = false;
-        } else {
-            var occ = _dayIndex(_ydate(evt.year, m, d));
-            res.next = occ;
-            res.prev = occ - 365;
-            res.passed = occ < t;
-        }
-        return res;
-    }
-
-    function _parseEvents(arr) {
-        if (!arr || typeof arr !== "object" || arr.length === undefined)
-            return [];
-
-        var out = [];
-        for (var i = 0; i < arr.length && out.length < 1; i++) {
-            var e = arr[i];
-            if (!e || typeof e !== "object")
-                continue;
-
-            var m = parseInt(e.month, 10), d = parseInt(e.day, 10);
-            if (isNaN(m) || isNaN(d))
-                continue;
-
-            out.push({
-                "id": e.id,
-                "name": String(e.name || ""),
-                "month": m,
-                "day": d,
-                "year": parseInt(e.year, 10) || 0,
-                "repeats": e.repeats === true
-            });
-        }
-        return out;
-    }
-
-    function _countOf(evt, now, precision, mode) {
-        var o = _occurrences(evt, now);
-        var t = _dayIndex(now);
-        var m = mode !== undefined ? mode : "both";
-        var p = precision !== undefined ? precision : "units";
-        var days, upcoming, anchor = o.next;
-        if (m === "countup") {
-            if (evt.repeats) {
-                anchor = o.prev;
-                days = t - o.prev;
-                upcoming = false;
-            } else {
-                days = Math.abs(o.next - t);
-                upcoming = !o.passed;
-                anchor = o.next;
-            }
-        } else {
-            days = Math.abs(o.next - t);
-            upcoming = !o.passed;
-            anchor = o.next;
-        }
-        if (days < 0)
-            days = 0;
-
-        var text;
-        if (p === "date" && days >= 7)
-            text = _dateLabel(evt, o, now, upcoming, anchor);
-        else
-            text = _unitText(days, upcoming, p);
-
+    function event(name, month, day, year) {
         return {
-            "text": text,
-            "upcoming": upcoming,
-            "days": days
+            "id": "e1",
+            "name": name,
+            "month": month,
+            "day": day,
+            "year": year || 0,
+            "repeats": !year
         };
     }
 
-function _dateLabel(evt, o, now, upcoming, anchor) {
-        var arrow = upcoming ? "\u2192 " : "\u2190 ";
-        var idx = anchor === undefined ? o.next : anchor;
-        var y = new Date(idx * 8.64e+07).getFullYear();
-        var yNow = now.getFullYear();
-        return arrow + _monthDayName(evt) + (y !== yNow ? " " + y : "");
+    function widgetWith(events, mode, precision) {
+        return h.createWidget({
+            "mode": mode || "both",
+            "precision": precision || "units",
+            "events": events
+        });
     }
 
-    function _monthDayName(evt) {
-        var names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        var mn = names[(evt.month - 1 + 12) % 12] || evt.month;
-        return mn + " " + evt.day;
+    function dayOf(index) {
+        var d = new Date(index * 8.64e+07);
+        return d.getUTCFullYear() + "-" + (d.getUTCMonth() + 1) + "-" + d.getUTCDate();
     }
 
-    function _unitText(days, upcoming, precision) {
-        if (days === 0)
-            return "today";
+    // --- The configured date survives startup and the panel ----------------
 
-        if (days === 1)
-            return upcoming ? "tomorrow" : "yesterday";
-
-        var prefix = upcoming ? "in " : "";
-        var suffix = upcoming ? "" : " ago";
-        if ((precision || "units") === "days")
-            return prefix + days + "d" + suffix;
-
-        if (days < 7)
-            return prefix + days + "d" + suffix;
-
-        if (days < 30)
-            return prefix + Math.round(days / 7) + "w" + suffix;
-
-        if (days < 365)
-            return prefix + Math.min(11, Math.round(days / 30)) + "mo" + suffix;
-
-        return prefix + Math.round(days / 365) + "y" + suffix;
+    // Regression: loading the name into the panel fired its onTextChanged
+    // while the date editors still held their defaults, which rewrote the
+    // event to January 1 as soon as the widget started.
+    function* test_startupKeepsTheConfiguredDate() {
+        var w = widgetWith([event("Christmas", 12, 24)]);
+        yield 50;
+        h.compare(w.events[0].month, 12, "month");
+        h.compare(w.events[0].day, 24, "day");
+        h.compare(h.byName("eventName").text, "Christmas");
+        h.compare(h.persisted.length, 0, "starting up writes nothing");
     }
 
-    function _nearestEvent(events, mode, now) {
-        if (!events || events.length === 0)
-            return null;
-
-        var e = events[0];
-        var c = _countOf(e, now);
-        if (mode === "countdown" && !c.upcoming)
-            return null;
-
-        if (mode === "countup" && c.upcoming)
-            return null;
-
-        return e;
+    // Regression: closing an untouched panel committed the corrupted date.
+    function* test_openingAndClosingThePanelWritesNothing() {
+        var w = widgetWith([event("Christmas", 12, 24)]);
+        yield 50;
+        w.open();
+        yield 50;
+        var panel = h.byName("eventCountdownPanel");
+        h.compare(panel.edMonth, 12, "month shown in the panel");
+        h.compare(panel.edDay, 24, "day shown in the panel");
+        w.close();
+        yield 50;
+        h.compare(h.persisted.length, 0, "nothing persisted");
+        h.compare(w.events[0].month + "/" + w.events[0].day, "12/24");
     }
 
-    function test_recurringBirthdayThisYear() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var bday = {
-            "id": "e",
-            "name": "B",
-            "month": 12,
-            "day": 12,
-            "year": 0,
-            "repeats": true
+    function* test_settingsPushedLaterReplaceTheEventIntact() {
+        var w = widgetWith([event("Christmas", 12, 24)]);
+        yield 50;
+        w.settings = {
+            "mode": "both",
+            "precision": "units",
+            "events": [event("Midsummer", 6, 24)]
         };
-        var o = _occurrences(bday, now);
-        verify(o.next === _dayIndex(new Date(2026, 11, 12)));
-        verify(o.prev === _dayIndex(new Date(2025, 11, 12)));
-        verify(o.passed === false);
+        yield 50;
+        h.compare(w.events[0].name, "Midsummer");
+        h.compare(w.events[0].month + "/" + w.events[0].day, "6/24");
+        // The panel's editors must follow, without the previous event's date
+        // leaking into the one that was just loaded.
+        var panel = h.byName("eventCountdownPanel");
+        h.compare(panel.edName, "Midsummer");
+        h.compare(panel.edMonth + "/" + panel.edDay, "6/24");
+        h.compare(panel.isDirty(), false);
     }
 
-    function test_recurringBirthdayRollsToNextYear() {
-        var now = new Date(2026, 11, 20, 9, 0, 0);
-        var bday = {
-            "id": "e",
-            "name": "B",
-            "month": 12,
-            "day": 12,
-            "year": 0,
-            "repeats": true
+    function* test_renamingAnEventKeepsItsDate() {
+        var w = widgetWith([event("Christmas", 12, 24)]);
+        yield 50;
+        w.open();
+        yield 50;
+        var field = h.byName("nameField");
+        h.click(field);
+        field.selectAll();
+        h.type("Xmas");
+        yield 20;
+        h.compare(h.persisted.length, 0, "typing alone is a preview");
+        w.close();
+        yield 50;
+        var saved = h.lastPersisted().events[0];
+        h.compare(saved.name, "Xmas");
+        h.compare(saved.month + "/" + saved.day, "12/24");
+    }
+
+    function* test_typingReachesTheNameFieldEvenForPanelShortcutKeys() {
+        var w = widgetWith([event("A", 1, 1)]);
+        yield 50;
+        w.open();
+        yield 50;
+        var field = h.byName("nameField");
+        h.click(field);
+        field.selectAll();
+        h.type("jkl hx");
+        h.compare(field.text, "jkl hx");
+    }
+
+    function* test_addingAnEventPersistsOnClose() {
+        var w = widgetWith([]);
+        yield 50;
+        h.compare(h.byName("eventName").text, "no events");
+        w.open();
+        yield 50;
+        h.click(h.byName("addEventButton"));
+        yield 20;
+        h.click(h.byName("nameField"));
+        h.type("Launch");
+        w.close();
+        yield 50;
+        h.compare(h.lastPersisted().events[0].name, "Launch");
+        h.compare(h.byName("eventName").text, "Launch");
+    }
+
+    function* test_clearingTheNameRemovesTheEvent() {
+        var w = widgetWith([event("Christmas", 12, 24)]);
+        yield 50;
+        w.open();
+        yield 50;
+        var field = h.byName("nameField");
+        h.click(field);
+        field.selectAll();
+        h.key(Qt.Key_Backspace);
+        yield 50;
+        h.compare(h.lastPersisted().events, []);
+        h.compare(w.events.length, 0);
+    }
+
+    function* test_changingTheMonthClampsTheDay() {
+        var w = widgetWith([event("Payday", 1, 31)]);
+        yield 50;
+        w.open();
+        yield 50;
+        h.compare(h.byName("dayField").to, 31);
+        h.byName("monthField").changed("4");
+        yield 50;
+        h.compare(h.byName("dayField").to, 30);
+        var saved = h.lastPersisted().events[0];
+        h.compare(saved.month + "/" + saved.day, "4/30");
+    }
+
+    // --- Rendering ---------------------------------------------------------
+
+    // The name is whatever the user typed; it must never be parsed as markup.
+    function* test_eventNameIsRenderedAsPlainText() {
+        var w = widgetWith([event("<b>Mom</b> <3", 12, 24)]);
+        yield 50;
+        var name = h.byName("eventName");
+        h.compare(name.text, "<b>Mom</b> <3");
+        h.compare(name.textFormat, Text.PlainText);
+        h.compare(h.byName("eventCount").textFormat, Text.PlainText);
+    }
+
+    function* test_modeDecidesWhetherTheEventIsShown() {
+        var past = new Date();
+        past.setDate(past.getDate() - 10);
+        var w = widgetWith([event("Past", past.getMonth() + 1, past.getDate(), past.getFullYear())], "countdown");
+        yield 50;
+        h.compare(h.byName("eventName").text, "no events", "a passed one-off has nothing to count down to");
+        w.settings = {
+            "mode": "countup",
+            "precision": "days",
+            "events": w.events
         };
-        var o = _occurrences(bday, now);
-        verify(o.next === _dayIndex(new Date(2027, 11, 12)));
-        verify(o.passed === false);
+        yield 50;
+        h.compare(h.byName("eventName").text, "Past");
+        h.compare(h.byName("eventCount").text, "10d ago");
     }
 
-    function test_oneOffUpcomingNotPassed() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var deadline = {
-            "id": "d",
-            "name": "D",
-            "month": 10,
-            "day": 1,
-            "year": 2026,
-            "repeats": false
-        };
-        var od = _occurrences(deadline, now);
-        verify(od.passed === false);
+    // --- Occurrences -------------------------------------------------------
+
+    function test_recurringEventLaterThisYear() {
+        var w = widgetWith([]);
+        var o = w.occurrences(event("B", 12, 12), june5);
+        h.compare(dayOf(o.next), "2026-12-12");
+        h.compare(dayOf(o.prev), "2025-12-12");
+        h.compare(o.passed, false);
     }
 
-    function test_oneOffPastCountsUp() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var past = {
-            "id": "p",
-            "name": "P",
-            "month": 6,
-            "day": 1,
-            "year": 2026,
-            "repeats": false
-        };
-        var op = _occurrences(past, now);
-        verify(op.passed === true);
-        var cp = _countOf(past, now);
-        verify(/^4d ago$/.test(cp.text));
-        verify(cp.upcoming === false);
+    function test_recurringEventRollsToNextYearOncePassed() {
+        var w = widgetWith([]);
+        var o = w.occurrences(event("B", 12, 12), new Date(2026, 11, 20, 9, 0, 0));
+        h.compare(dayOf(o.next), "2027-12-12");
+        h.compare(dayOf(o.prev), "2026-12-12");
     }
 
-    function test_countOfRecurringPastCountsUp() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var bday = {
-            "id": "e",
-            "name": "B",
-            "month": 1,
-            "day": 1,
-            "year": 0,
-            "repeats": true
-        };
-        var c = _countOf(bday, now, "units", "countup");
-        verify(c.upcoming === false);
-        var expected = _dayIndex(now) - _dayIndex(new Date(2026, 0, 1));
-        verify(c.days === expected);
-        verify(/mo ago$/.test(c.text));
+    function test_oneOffEventKnowsWhetherItHasPassed() {
+        var w = widgetWith([]);
+        h.compare(w.occurrences(event("D", 10, 1, 2026), june5).passed, false);
+        h.compare(w.occurrences(event("P", 6, 1, 2026), june5).passed, true);
     }
 
-    function test_countOfRecurringAlwaysCountsFromLastInCountup() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var bday = {
-            "id": "e",
-            "name": "B",
-            "month": 12,
-            "day": 12,
-            "year": 0,
-            "repeats": true
-        };
-        var c = _countOf(bday, now, "units", "countup");
-        verify(c.upcoming === false);
-        var expected = _dayIndex(now) - _dayIndex(new Date(2025, 11, 12));
-        verify(c.days === expected);
+    // Regression: Feb 31 used to roll over to March 3 while still being
+    // labelled "Feb 31", and Feb 29 landed on March 1 outside leap years.
+    function test_impossibleDatesStayInTheirOwnMonth() {
+        var w = widgetWith([]);
+        var january = new Date(2026, 0, 10, 12, 0, 0);
+        h.compare(dayOf(w.occurrences(event("X", 2, 31), january).next), "2026-2-28");
+        h.compare(dayOf(w.occurrences(event("Leapling", 2, 29), january).next), "2026-2-28");
+        h.compare(dayOf(w.occurrences(event("Leapling", 2, 29), new Date(2028, 0, 10)).next), "2028-2-29");
+        h.compare(dayOf(w.occurrences(event("X", 4, 31), january).next), "2026-4-30");
     }
 
-    function test_countOfRecurringDisplaysInXd() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var bday = {
-            "id": "e",
-            "name": "B",
-            "month": 12,
-            "day": 12,
-            "year": 0,
-            "repeats": true
-        };
-        var c = _countOf(bday, now, "units");
-        verify(c.text === "in 6mo");
-        verify(c.upcoming === true);
+    // --- Counting ----------------------------------------------------------
+
+    function test_countsDownInFuzzyUnits() {
+        var w = widgetWith([]);
+        var c = w.countOf(event("B", 12, 12), june5, "units", "both");
+        h.compare(c.text, "in 6mo");
+        h.compare(c.upcoming, true);
+        h.compare(w.countOf(event("S", 6, 15, 2026), june5, "units", "both").text, "in 1w");
+        h.compare(w.countOf(event("F", 7, 5, 2027), june5, "units", "both").text, "in 1y");
     }
 
-    function test_precisionExactKeepsDays() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var bday = {
-            "id": "e",
-            "name": "B",
-            "month": 12,
-            "day": 12,
-            "year": 0,
-            "repeats": true
-        };
-        var c = _countOf(bday, now, "days");
-        verify(c.text === "in 190d");
+    function test_countsDownInExactDays() {
+        var w = widgetWith([]);
+        h.compare(w.countOf(event("B", 12, 12), june5, "days", "both").text, "in 190d");
     }
 
-    function test_precisionDateShowsDate() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var bday = {
-            "id": "e",
-            "name": "B",
-            "month": 12,
-            "day": 12,
-            "year": 0,
-            "repeats": true
-        };
-        var c = _countOf(bday, now, "date");
-        verify(c.text === "→ Dec 12");
+    function test_todayAndTomorrow() {
+        var w = widgetWith([]);
+        h.compare(w.countOf(event("T", 6, 5), june5, "units", "both").text, "today");
+        h.compare(w.countOf(event("M", 6, 6), june5, "units", "both").text, "tomorrow");
     }
 
-    function test_precisionUnitsWeeks() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var soon = {
-            "id": "s",
-            "name": "S",
-            "month": 6,
-            "day": 15,
-            "year": 2026,
-            "repeats": false
-        };
-        var d = _countOf(soon, now, "units");
-        verify(d.text === "in 1w");
+    function test_passedOneOffCountsUp() {
+        var w = widgetWith([]);
+        var c = w.countOf(event("P", 6, 1, 2026), june5, "units", "both");
+        h.compare(c.text, "4d ago");
+        h.compare(c.upcoming, false);
     }
 
-    function test_precisionUnitsYears() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var far = {
-            "id": "f",
-            "name": "F",
-            "month": 7,
-            "day": 5,
-            "year": 2027,
-            "repeats": false
-        };
-        var c = _countOf(far, now, "units");
-        verify(c.text === "in 1y");
+    function test_countUpMeasuresFromTheLastOccurrence() {
+        var w = widgetWith([]);
+        var c = w.countOf(event("B", 1, 1), june5, "units", "countup");
+        h.compare(c.upcoming, false);
+        h.compare(c.days, 155);
+        h.compare(c.text, "5mo ago");
+        h.compare(w.countOf(event("B", 12, 12), june5, "days", "countup").text, "175d ago");
     }
 
-    function test_countOfTodayAndTomorrow() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var today = {
-            "id": "t",
-            "name": "T",
-            "month": 6,
-            "day": 5,
-            "year": 0,
-            "repeats": true
-        };
-        var tomorrow = {
-            "id": "m",
-            "name": "M",
-            "month": 6,
-            "day": 6,
-            "year": 0,
-            "repeats": true
-        };
-        verify(_countOf(today, now).text === "today");
-        verify(_countOf(tomorrow, now).text === "tomorrow");
+    // Regression: on the anniversary itself count-up measured from last
+    // year's occurrence and showed "1y ago".
+    function test_countUpOnTheDayItselfReadsToday() {
+        var w = widgetWith([]);
+        var c = w.countOf(event("T", 6, 5), june5, "units", "countup");
+        h.compare(c.text, "today");
+        h.compare(c.days, 0);
     }
 
-    function test_countOfOneOffPassedDisplaysDaysAgo() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var past = {
-            "id": "p",
-            "name": "P",
-            "month": 6,
-            "day": 1,
-            "year": 2026,
-            "repeats": false
-        };
-        var cp = _countOf(past, now);
-        verify(/^4d ago$/.test(cp.text));
-        verify(cp.upcoming === false);
+    function test_dateFormatShowsTheDate() {
+        var w = widgetWith([]);
+        h.compare(w.countOf(event("B", 12, 12), june5, "date", "both").text, "→ Dec 12");
+        h.compare(w.countOf(event("B", 12, 12), june5, "date", "countup").text, "← Dec 12 2025");
+        h.compare(w.countOf(event("Soon", 6, 8), june5, "date", "both").text, "in 3d", "within a week it falls back to a count");
     }
 
-    function test_parseEventsKeepsOnlyFirstEvent() {
-        var listLike = {
-            "length": 2,
-            "0": {
-                "id": "a",
-                "name": "My Birthday",
-                "month": 1,
-                "day": 1,
-                "year": 0,
-                "repeats": true
-            },
-            "1": {
-                "id": "b",
-                "name": "Ignored",
-                "month": 3,
-                "day": 15,
-                "year": 2027,
-                "repeats": false
-            }
-        };
-        verify(Array.isArray(listLike) === false);
-        var out = _parseEvents(listLike);
-        verify(out.length === 1);
-        verify(out[0].name === "My Birthday");
-        verify(out[0].repeats === true);
+    // Regression: the label's year was read in local time from a UTC day
+    // index, so west of UTC a January 1 event lost its year.
+    function test_dateFormatAddsTheYearWhenItDiffers() {
+        var w = widgetWith([]);
+        var october = new Date(2026, 9, 13, 10, 0, 0);
+        h.compare(w.countOf(event("New Year", 1, 1), october, "date", "both").text, "→ Jan 1 2027");
     }
 
-    function test_parseEventsRejectsInvalidSingle() {
-        var listLike = {
-            "length": 1,
-            "0": {
-                "id": "bad",
-                "name": "No date",
-                "month": "x",
-                "day": "y",
-                "year": 0,
-                "repeats": true
-            }
-        };
-        verify(_parseEvents(listLike).length === 0);
+    // --- Settings parsing --------------------------------------------------
+
+    function test_parseEventsKeepsOnlyTheFirstEvent() {
+        var w = widgetWith([]);
+        var out = w.parseEvents([event("First", 1, 1), event("Ignored", 3, 15, 2027)]);
+        h.compare(out.length, 1);
+        h.compare(out[0].name, "First");
+        h.compare(out[0].repeats, true);
     }
 
-    function test_nearestEventSingleEventByMode() {
-        var now = new Date(2026, 5, 5, 12, 0, 0);
-        var future = [{
-            "id": "a",
-            "name": "A",
-            "month": 6,
-            "day": 10,
-            "year": 2026,
-            "repeats": false
-        }];
-        var past = [{
-            "id": "b",
-            "name": "B",
-            "month": 6,
-            "day": 1,
-            "year": 2026,
-            "repeats": false
-        }];
-        verify(_nearestEvent(future, "countdown", now) === future[0]);
-        verify(_nearestEvent(past, "countdown", now) === null);
-        verify(_nearestEvent(past, "countup", now) === past[0]);
-        verify(_nearestEvent(future, "countup", now) === null);
-        verify(_nearestEvent(future, "both", now) === future[0]);
-        verify(_nearestEvent([], "both", now) === null);
+    function test_parseEventsRejectsDatesThatCannotExist() {
+        var w = widgetWith([]);
+        h.compare(w.parseEvents([event("No date", "x", "y")]).length, 0);
+        h.compare(w.parseEvents([event("Month 13", 13, 1)]).length, 0);
+        h.compare(w.parseEvents([event("Day 0", 5, 0)]).length, 0);
+        h.compare(w.parseEvents([event("Day 32", 5, 32)]).length, 0);
+        h.compare(w.parseEvents("nonsense").length, 0);
     }
 
-    name: "EventCountdown"
-    when: windowShown
 }
