@@ -29,6 +29,8 @@ Panel {
     // been loaded, so without this the stale date would be applied to the
     // event that was just read.
     property bool syncing: false
+    // The saved event the editors were last loaded from; null when none.
+    property var loadedEvent: null
     readonly property color foreground: root.barForeground
     readonly property color dim: Qt.darker(root.foreground, 1.55)
     readonly property string fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
@@ -57,12 +59,28 @@ Panel {
     }
 
     function syncFromWidget() {
+        var saved = root.currentW();
         root.syncing = true;
         root.edMode = root.modeW();
         root.edPrecision = root.precisionW();
-        root.workEvent = root.copyEvent(root.currentW());
-        root.loadEvent();
+        // The widget also asks for a sync when only the count direction or
+        // the bar format changed. While the panel is open and the saved event
+        // is still the one the editors were loaded from, they are left alone:
+        // reloading would throw away a name that is typed but not saved yet,
+        // or a new event that has not been named yet.
+        if (!root.opened || !root.sameEvent(saved, root.loadedEvent)) {
+            root.loadedEvent = root.copyEvent(saved);
+            root.workEvent = root.copyEvent(saved);
+            root.loadEvent();
+        }
         root.syncing = false;
+    }
+
+    function sameEvent(a, b) {
+        if (!a || !b)
+            return !a && !b;
+
+        return a.name === b.name && a.month === b.month && a.day === b.day && a.year === b.year && a.repeats === b.repeats;
     }
 
     // The editors work on their own copy: the widget's event only changes
@@ -86,11 +104,7 @@ Panel {
         if (!e)
             return false;
 
-        var cur = root.currentW();
-        if (!cur)
-            return true;
-
-        return e.name !== cur.name || e.month !== cur.month || e.day !== cur.day || e.year !== cur.year || e.repeats !== cur.repeats;
+        return !root.sameEvent(e, root.currentW());
     }
 
     // Last valid day of the month being edited. A recurring event has no
@@ -483,6 +497,8 @@ Panel {
                             }
 
                             Dropdown {
+                                id: monthDropdown
+
                                 objectName: "monthField"
                                 width: parent.width
                                 showLabel: false
@@ -495,6 +511,15 @@ Panel {
                                     root.edMonth = parseInt(v, 10);
                                     root.clampDay();
                                     root.applyChange();
+                                    // The kit dropdown assigns its own value
+                                    // when a row is picked, which drops the
+                                    // binding above. Without putting it back
+                                    // the dropdown stops following the month,
+                                    // and can show one month while another
+                                    // is saved.
+                                    monthDropdown.value = Qt.binding(function() {
+                                        return String(root.edMonth);
+                                    });
                                 }
                             }
 

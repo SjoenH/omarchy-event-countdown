@@ -149,6 +149,120 @@ Item {
         h.compare(h.byName("eventName").text, "Launch");
     }
 
+    // Regression (from making the panel edit a copy): changing the count
+    // direction or the bar format re-synced the editors and threw away a
+    // name that was typed but not saved yet.
+    function* test_changingTheCountDirectionKeepsAnUnsavedName() {
+        var w = widgetWith([event("Christmas", 12, 24)]);
+        yield 50;
+        w.open();
+        yield 50;
+        var field = h.byName("nameField");
+        h.click(field);
+        field.selectAll();
+        h.type("Xmas");
+        h.byName("modeField").changed("countup");
+        yield 50;
+        h.compare(field.text, "Xmas");
+        h.compare(h.lastPersisted().mode, "countup");
+        h.byName("formatField").changed("days");
+        yield 50;
+        h.compare(field.text, "Xmas");
+        w.close();
+        yield 50;
+        h.compare(h.lastPersisted().events[0].name, "Xmas");
+        h.compare(h.lastPersisted().precision, "days");
+    }
+
+    // Regression: with a new event not named yet, picking its month counted
+    // as "the name is blank, so remove the event" and the form disappeared.
+    function* test_aNewEventCanGetItsDateBeforeItsName() {
+        var w = widgetWith([]);
+        yield 50;
+        w.open();
+        yield 50;
+        h.click(h.byName("addEventButton"));
+        yield 20;
+        h.byName("monthField").changed("3");
+        yield 50;
+        var field = h.byName("nameField");
+        h.verify(field.visible, "the form is still there");
+        h.click(field);
+        h.type("Spring");
+        w.close();
+        yield 50;
+        var saved = h.lastPersisted().events[0];
+        h.compare(saved.name + " " + saved.month + "/" + saved.day, "Spring 3/1");
+    }
+
+    function* test_aNewEventSurvivesAFormatChange() {
+        var w = widgetWith([]);
+        yield 50;
+        w.open();
+        yield 50;
+        h.click(h.byName("addEventButton"));
+        yield 20;
+        h.click(h.byName("nameField"));
+        h.type("Launch");
+        h.byName("formatField").changed("days");
+        yield 50;
+        h.compare(h.byName("nameField").text, "Launch");
+        w.close();
+        yield 50;
+        h.compare(h.lastPersisted().events[0].name, "Launch");
+    }
+
+    // Regression: both kinds of dropdown assign their own value when a row
+    // is picked, which dropped the binding to the editor. The month shown
+    // could then differ from the month saved.
+    function* test_theMonthDropdownKeepsFollowingTheMonth() {
+        var w = widgetWith([event("Christmas", 12, 24)]);
+        yield 50;
+        w.open();
+        yield 50;
+        var month = h.byName("monthField");
+        month.open();
+        yield 100;
+        h.key(Qt.Key_Up);
+        h.key(Qt.Key_Return);
+        yield 100;
+        h.compare(h.lastPersisted().events[0].month, 11, "November picked in the list");
+        h.compare(month.value, "11");
+        // Remove the event and start a new one: its month is January.
+        var field = h.byName("nameField");
+        h.click(field);
+        field.selectAll();
+        h.key(Qt.Key_Backspace);
+        yield 50;
+        h.click(h.byName("addEventButton"));
+        yield 50;
+        h.compare(h.byName("eventCountdownPanel").edMonth, 1);
+        h.compare(month.value, "1", "the dropdown shows the new event's month");
+    }
+
+    function* test_theCountDirectionDropdownKeepsFollowingTheSetting() {
+        var w = widgetWith([event("Christmas", 12, 24)], "both");
+        yield 50;
+        w.open();
+        yield 50;
+        var mode = h.byName("modeField");
+        mode.open();
+        yield 100;
+        h.key(Qt.Key_Up);
+        h.key(Qt.Key_Up);
+        h.key(Qt.Key_Return);
+        yield 100;
+        h.compare(h.lastPersisted().mode, "countdown", "picked in the list");
+        h.compare(mode.value, "countdown");
+        w.settings = {
+            "mode": "countup",
+            "precision": "units",
+            "events": w.events
+        };
+        yield 50;
+        h.compare(mode.value, "countup", "and it still follows a change from outside");
+    }
+
     function* test_clearingTheNameRemovesTheEvent() {
         var w = widgetWith([event("Christmas", 12, 24)]);
         yield 50;

@@ -217,7 +217,9 @@ Item {
           function selectCurrent() {
             if (currentIndex < 0 || currentIndex >= root.options.length) return
             var v = root.optionValue(root.options[currentIndex])
-            root.value = v
+            // Only announce the choice. Assigning root.value here would drop
+            // the owner's binding on it, and the dropdown would stop
+            // following the value it is bound to.
             root.changed(v)
             popup.close()
           }
