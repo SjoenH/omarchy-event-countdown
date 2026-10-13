@@ -24,6 +24,11 @@ Panel {
     property int edDay: 1
     property int edYear: 0
     property bool edRepeats: true
+    // True while the editors are being loaded from the widget. Loading the
+    // name fires the name field's onTextChanged before the date editors have
+    // been loaded, so without this the stale date would be applied to the
+    // event that was just read.
+    property bool syncing: false
 
     // === 9. FUNCTIONS ===
     function modeW() {
@@ -35,10 +40,55 @@ Panel {
     }
 
     function syncFromWidget() {
+        root.syncing = true;
         root.edMode = root.modeW();
         root.edPrecision = root.precisionW();
-        root.workEvent = root.currentW();
+        root.workEvent = root.copyEvent(root.currentW());
         root.loadEvent();
+        root.syncing = false;
+    }
+
+    // The editors work on their own copy: the widget's event only changes
+    // through persist(), never by editing the object it is displaying.
+    function copyEvent(e) {
+        if (!e)
+            return null;
+
+        return {
+            "id": e.id,
+            "name": e.name,
+            "month": e.month,
+            "day": e.day,
+            "year": e.year,
+            "repeats": e.repeats
+        };
+    }
+
+    function isDirty() {
+        var e = root.workEvent;
+        if (!e)
+            return false;
+
+        var cur = root.currentW();
+        if (!cur)
+            return true;
+
+        return e.name !== cur.name || e.month !== cur.month || e.day !== cur.day || e.year !== cur.year || e.repeats !== cur.repeats;
+    }
+
+    // Last valid day of the month being edited. A recurring event has no
+    // year, so February allows the 29th.
+    function maxDay() {
+        if (root.hostWidget)
+            return root.hostWidget.daysInMonth(root.edRepeats ? 2000 : root.edYear, root.edMonth);
+
+        return 31;
+    }
+
+    function clampDay() {
+        if (root.edDay > root.maxDay())
+            root.edDay = root.maxDay();
+
     }
 
     function currentW() {
@@ -156,8 +206,10 @@ Panel {
         if (root.hostWidget) {
             var e = root.hostWidget.emptyEvent();
             e.id = root.hostWidget.newId();
+            root.syncing = true;
             root.workEvent = e;
             root.loadEvent();
+            root.syncing = false;
         }
     }
 
@@ -168,7 +220,9 @@ Panel {
 
     function close() {
         root.applyEditors();
-        if (root.canCommit())
+        // Only write when something was actually edited; closing an untouched
+        // panel must leave shell.json alone.
+        if (root.canCommit() && root.isDirty())
             root.commit();
 
         root.controller.hide();
@@ -243,6 +297,7 @@ Panel {
                     }
 
                     Button {
+                        objectName: "addEventButton"
                         width: parent.width
                         text: "Add event"
                         focusable: true
@@ -273,6 +328,7 @@ Panel {
                         }
 
                         TextField {
+                            objectName: "nameField"
                             width: parent.width
                             text: root.edName
                             placeholderText: "Birthday, Anniversary…"
@@ -281,6 +337,9 @@ Panel {
                             font.family: root.bar ? root.bar.fontFamily : Style.font.family
                             font.pixelSize: Style.font.body
                             onTextChanged: {
+                                if (root.syncing)
+                                    return;
+
                                 root.edName = text;
                                 // Keystrokes stay in preview; the name flushes
                                 // on close or with the next discrete change.
@@ -312,6 +371,7 @@ Panel {
                             }
 
                             Dropdown {
+                                objectName: "monthField"
                                 width: parent.width
                                 showLabel: false
                                 value: String(root.edMonth)
@@ -321,6 +381,7 @@ Panel {
                                 fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
                                 onChanged: function(v) {
                                     root.edMonth = parseInt(v, 10);
+                                    root.clampDay();
                                     root.applyChange();
                                 }
                             }
@@ -339,11 +400,12 @@ Panel {
                             }
 
                             NumberField {
+                                objectName: "dayField"
                                 width: parent.width
                                 fieldWidth: parent.width
                                 value: root.edDay
                                 from: 1
-                                to: 31
+                                to: root.maxDay()
                                 stepSize: 1
                                 foreground: root.barForeground
                                 accent: Color.accent
@@ -385,6 +447,7 @@ Panel {
                                 }
                                 onModified: function(v) {
                                     root.edYear = v;
+                                    root.clampDay();
                                     root.applyChange();
                                 }
                             }
@@ -406,6 +469,7 @@ Panel {
                                 var t = new Date();
                                 root.edYear = t.getFullYear();
                             }
+                            root.clampDay();
                             root.applyChange();
                         }
                     }
