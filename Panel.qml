@@ -24,6 +24,30 @@ Panel {
     property int edDay: 1
     property int edYear: 0
     property bool edRepeats: true
+    // True while the editors are being loaded from the widget. Loading the
+    // name fires the name field's onTextChanged before the date editors have
+    // been loaded, so without this the stale date would be applied to the
+    // event that was just read.
+    property bool syncing: false
+    // The saved event the editors were last loaded from; null when none.
+    property var loadedEvent: null
+    readonly property color foreground: root.barForeground
+    readonly property color dim: Qt.darker(root.foreground, 1.55)
+    readonly property string fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+    // The event as the editors currently describe it, so the card previews
+    // an edit before it is saved. Null while there is no event.
+    readonly property var previewEvent: root.workEvent === null ? null : ({
+        "name": root.edName,
+        "month": root.edMonth,
+        "day": root.edDay,
+        "year": root.edYear,
+        "repeats": root.edRepeats
+    })
+    // The moment the card counts from, refreshed whenever the panel opens.
+    // Without it the card would keep the count from the day it was first shown.
+    property double nowMs: Date.now()
+    readonly property var previewCount: root.previewEvent && root.hostWidget ? root.hostWidget.countOf(root.previewEvent, new Date(root.nowMs), root.edPrecision, root.edMode) : null
+    readonly property bool hasEvent: root.previewCount !== null
 
     // === 9. FUNCTIONS ===
     function modeW() {
@@ -35,10 +59,67 @@ Panel {
     }
 
     function syncFromWidget() {
+        var saved = root.currentW();
+        root.syncing = true;
         root.edMode = root.modeW();
         root.edPrecision = root.precisionW();
-        root.workEvent = root.currentW();
-        root.loadEvent();
+        // The widget also asks for a sync when only the count direction or
+        // the bar format changed. While the panel is open and the saved event
+        // is still the one the editors were loaded from, they are left alone:
+        // reloading would throw away a name that is typed but not saved yet,
+        // or a new event that has not been named yet.
+        if (!root.opened || !root.sameEvent(saved, root.loadedEvent)) {
+            root.loadedEvent = root.copyEvent(saved);
+            root.workEvent = root.copyEvent(saved);
+            root.loadEvent();
+        }
+        root.syncing = false;
+    }
+
+    function sameEvent(a, b) {
+        if (!a || !b)
+            return !a && !b;
+
+        return a.name === b.name && a.month === b.month && a.day === b.day && a.year === b.year && a.repeats === b.repeats;
+    }
+
+    // The editors work on their own copy: the widget's event only changes
+    // through persist(), never by editing the object it is displaying.
+    function copyEvent(e) {
+        if (!e)
+            return null;
+
+        return {
+            "id": e.id,
+            "name": e.name,
+            "month": e.month,
+            "day": e.day,
+            "year": e.year,
+            "repeats": e.repeats
+        };
+    }
+
+    function isDirty() {
+        var e = root.workEvent;
+        if (!e)
+            return false;
+
+        return !root.sameEvent(e, root.currentW());
+    }
+
+    // Last valid day of the month being edited. A recurring event has no
+    // year, so February allows the 29th.
+    function maxDay() {
+        if (root.hostWidget)
+            return root.hostWidget.daysInMonth(root.edRepeats ? 2000 : root.edYear, root.edMonth);
+
+        return 31;
+    }
+
+    function clampDay() {
+        if (root.edDay > root.maxDay())
+            root.edDay = root.maxDay();
+
     }
 
     function currentW() {
@@ -156,22 +237,30 @@ Panel {
         if (root.hostWidget) {
             var e = root.hostWidget.emptyEvent();
             e.id = root.hostWidget.newId();
+            root.syncing = true;
             root.workEvent = e;
             root.loadEvent();
+            root.syncing = false;
         }
     }
 
     function open() {
+        root.nowMs = Date.now();
         root.syncFromWidget();
         root.controller.show();
     }
 
     function close() {
+        // Hide first. While it is open the panel is a full-screen overlay
+        // that takes every click, so nothing that goes wrong while saving
+        // may leave it up.
+        root.controller.hide();
         root.applyEditors();
-        if (root.canCommit())
+        // Only write when something was actually edited; closing an untouched
+        // panel must leave shell.json alone.
+        if (root.canCommit() && root.isDirty())
             root.commit();
 
-        root.controller.hide();
     }
 
     function switchPanel(direction) {
@@ -179,6 +268,54 @@ Panel {
             return root.bar.switchPanelFrom(root.hostWidget || root, direction);
 
         return false;
+    }
+
+    // The occurrence being counted, as a local date.
+    function countedDate() {
+        if (!root.previewCount)
+            return null;
+
+        var d = new Date(root.previewCount.anchor * 8.64e+07);
+        return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    }
+
+    // The arched line over the title: the day being counted to or from.
+    function captionText() {
+        var date = root.countedDate();
+        if (!date)
+            return "Nothing to count down to yet";
+
+        return Qt.locale().toString(date, date.getFullYear() === new Date(root.nowMs).getFullYear() ? "dddd, MMMM d" : "dddd, MMMM d, yyyy");
+    }
+
+    function cardName() {
+        if (root.edName.trim() !== "")
+            return root.edName;
+
+        return root.hostWidget ? root.hostWidget.monthDayName(root.previewEvent) : "";
+    }
+
+    function cardDetail() {
+        var date = root.hostWidget.monthDayName(root.previewEvent);
+        return root.edRepeats ? date + " \u00b7 every year" : date + ", " + root.edYear + " \u00b7 one-off";
+    }
+
+    function cardValue() {
+        return root.previewCount.days === 0 ? "Today" : String(root.previewCount.days);
+    }
+
+    function cardUnit() {
+        if (root.previewCount.days === 0)
+            return "";
+
+        return root.previewCount.days === 1 ? "day" : "days";
+    }
+
+    function cardNote() {
+        if (root.previewCount.days === 0)
+            return "";
+
+        return root.previewCount.upcoming ? "to go" : "ago";
     }
 
     function monthOptions() {
@@ -208,7 +345,7 @@ Panel {
         bar: root.bar
         open: root.opened
         focusTarget: keyCatcher
-        contentWidth: panel.fittedContentWidth(Style.space(300))
+        contentWidth: panel.fittedContentWidth(Style.space(340))
         contentHeight: panel.fittedContentHeight(content.implicitHeight)
 
         PanelKeyCatcher {
@@ -225,34 +362,73 @@ Panel {
 
                 width: parent.width
                 spacing: Style.space(12)
-                padding: Style.space(4)
 
-                // --- Single event editor ---
-                Column {
+                PanelTitle {
                     width: parent.width
-                    spacing: Style.space(8)
+                    caption: root.captionText()
+                    leftWord: "Event"
+                    rightWord: "Countdown"
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+
+                    // A calendar page showing the day being counted.
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: Style.space(2)
+                        radius: Math.min(Style.cornerRadius, Style.space(5))
+                        color: "transparent"
+                        border.width: Math.max(1, Style.space(2))
+                        border.color: root.foreground
+
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            height: Math.round(parent.height * 0.3)
+                            radius: parent.radius
+                            color: root.foreground
+                        }
+
+                        Text {
+                            objectName: "titleDay"
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: Style.space(2)
+                            textFormat: Text.PlainText
+                            text: root.countedDate() ? root.countedDate().getDate() : "\u2013"
+                            color: root.foreground
+                            font.family: root.fontFamily
+                            font.pixelSize: Style.font.body
+                            font.weight: Font.DemiBold
+                        }
+
+                    }
+
+                }
+
+                StatCard {
+                    objectName: "eventCard"
+                    width: parent.width
+                    visible: root.hasEvent
+                    name: root.hasEvent ? root.cardName() : ""
+                    detail: root.hasEvent ? root.cardDetail() : ""
+                    value: root.hasEvent ? root.cardValue() : ""
+                    unit: root.hasEvent ? root.cardUnit() : ""
+                    note: root.hasEvent ? root.cardNote() : ""
+                    progress: root.hasEvent ? root.previewCount.progress : -1
+                    markerColor: Color.accent
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                }
+
+                ActionButton {
+                    objectName: "addEventButton"
+                    width: parent.width
                     visible: root.workEvent === null
-
-                    Text {
-                        width: parent.width
-                        text: "No event yet"
-                        color: Qt.darker(root.barForeground, 1.4)
-                        font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                        font.pixelSize: Style.font.caption
-                        font.bold: true
-                    }
-
-                    Button {
-                        width: parent.width
-                        text: "Add event"
-                        focusable: true
-                        foreground: root.barForeground
-                        accent: Color.accent
-                        fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                        fontSize: Style.font.body
-                        onClicked: root.addEvent()
-                    }
-
+                    text: "+  Add an event"
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    onClicked: root.addEvent()
                 }
 
                 // --- Edit form ---
@@ -266,21 +442,28 @@ Panel {
                         spacing: Style.space(2)
 
                         Text {
+                            textFormat: Text.PlainText
                             text: "Name"
-                            color: Qt.darker(root.barForeground, 1.4)
-                            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                            color: root.dim
+                            font.family: root.fontFamily
                             font.pixelSize: Style.font.caption
+                            font.bold: true
                         }
 
                         TextField {
+                            objectName: "nameField"
                             width: parent.width
                             text: root.edName
-                            placeholderText: "Birthday, Anniversary…"
-                            foreground: root.barForeground
+                            placeholderText: "Birthday, Anniversary\u2026"
+                            foreground: root.foreground
                             accent: Color.accent
-                            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                            font.family: root.fontFamily
                             font.pixelSize: Style.font.body
+                            Accessible.name: "Event name"
                             onTextChanged: {
+                                if (root.syncing)
+                                    return;
+
                                 root.edName = text;
                                 // Keystrokes stay in preview; the name flushes
                                 // on close or with the next discrete change.
@@ -305,23 +488,38 @@ Panel {
                             spacing: Style.space(2)
 
                             Text {
+                                textFormat: Text.PlainText
                                 text: "Month"
-                                color: Qt.darker(root.barForeground, 1.4)
-                                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                                color: root.dim
+                                font.family: root.fontFamily
                                 font.pixelSize: Style.font.caption
+                                font.bold: true
                             }
 
                             Dropdown {
+                                id: monthDropdown
+
+                                objectName: "monthField"
                                 width: parent.width
                                 showLabel: false
                                 value: String(root.edMonth)
                                 options: root.monthOptions()
-                                foreground: root.barForeground
+                                foreground: root.foreground
                                 accent: Color.accent
-                                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                                fontFamily: root.fontFamily
                                 onChanged: function(v) {
                                     root.edMonth = parseInt(v, 10);
+                                    root.clampDay();
                                     root.applyChange();
+                                    // The kit dropdown assigns its own value
+                                    // when a row is picked, which drops the
+                                    // binding above. Without putting it back
+                                    // the dropdown stops following the month,
+                                    // and can show one month while another
+                                    // is saved.
+                                    monthDropdown.value = Qt.binding(function() {
+                                        return String(root.edMonth);
+                                    });
                                 }
                             }
 
@@ -332,22 +530,25 @@ Panel {
                             spacing: Style.space(2)
 
                             Text {
+                                textFormat: Text.PlainText
                                 text: "Day"
-                                color: Qt.darker(root.barForeground, 1.4)
-                                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                                color: root.dim
+                                font.family: root.fontFamily
                                 font.pixelSize: Style.font.caption
+                                font.bold: true
                             }
 
                             NumberField {
+                                objectName: "dayField"
                                 width: parent.width
                                 fieldWidth: parent.width
                                 value: root.edDay
                                 from: 1
-                                to: 31
+                                to: root.maxDay()
                                 stepSize: 1
-                                foreground: root.barForeground
+                                foreground: root.foreground
                                 accent: Color.accent
-                                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                                fontFamily: root.fontFamily
                                 onModified: function(v) {
                                     root.edDay = v;
                                     root.applyChange();
@@ -362,22 +563,25 @@ Panel {
                             visible: !root.edRepeats
 
                             Text {
+                                textFormat: Text.PlainText
                                 text: "Year"
-                                color: Qt.darker(root.barForeground, 1.4)
-                                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                                color: root.dim
+                                font.family: root.fontFamily
                                 font.pixelSize: Style.font.caption
+                                font.bold: true
                             }
 
                             NumberField {
+                                objectName: "yearField"
                                 width: parent.width
                                 fieldWidth: parent.width
                                 value: root.edYear
                                 from: 1
                                 to: 9999
                                 stepSize: 1
-                                foreground: root.barForeground
+                                foreground: root.foreground
                                 accent: Color.accent
-                                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                                fontFamily: root.fontFamily
                                 // Plain digits: the kit SpinBox formats through the
                                 // locale, which turns a year into "2,026".
                                 Component.onCompleted: field.textFromValue = function(value, locale) {
@@ -385,6 +589,7 @@ Panel {
                                 }
                                 onModified: function(v) {
                                     root.edYear = v;
+                                    root.clampDay();
                                     root.applyChange();
                                 }
                             }
@@ -394,18 +599,21 @@ Panel {
                     }
 
                     Toggle {
+                        objectName: "recurringToggle"
                         width: parent.width
-                        label: "Recurring event"
+                        label: "Every year"
+                        description: root.edRepeats ? "Birthdays, anniversaries, holidays" : "A single date, with a year"
                         checked: root.edRepeats
-                        foreground: root.barForeground
+                        foreground: root.foreground
                         accent: Color.accent
-                        fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                        fontFamily: root.fontFamily
                         onClicked: {
                             root.edRepeats = !root.edRepeats;
                             if (!root.edRepeats && root.edYear < 1) {
                                 var t = new Date();
                                 root.edYear = t.getFullYear();
                             }
+                            root.clampDay();
                             root.applyChange();
                         }
                     }
@@ -418,14 +626,16 @@ Panel {
                     visible: root.workEvent !== null
 
                     Text {
+                        textFormat: Text.PlainText
                         text: "Count direction"
-                        color: Qt.darker(root.barForeground, 1.4)
-                        font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                        color: root.dim
+                        font.family: root.fontFamily
                         font.pixelSize: Style.font.caption
                         font.bold: true
                     }
 
                     ExplainDropdown {
+                        objectName: "modeField"
                         width: parent.width
                         options: [{
                             "value": "countdown",
@@ -444,23 +654,25 @@ Panel {
                             "explanation": "Counts down when the event is upcoming, and up once it has passed."
                         }]
                         value: root.edMode
-                        foreground: root.barForeground
+                        foreground: root.foreground
                         accent: Color.accent
-                        fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                        fontFamily: root.fontFamily
                         onChanged: function(mode) {
                             root.switchMode(mode);
                         }
                     }
 
                     Text {
-                        text: "Format"
-                        color: Qt.darker(root.barForeground, 1.4)
-                        font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                        textFormat: Text.PlainText
+                        text: "Bar format"
+                        color: root.dim
+                        font.family: root.fontFamily
                         font.pixelSize: Style.font.caption
                         font.bold: true
                     }
 
                     ExplainDropdown {
+                        objectName: "formatField"
                         width: parent.width
                         options: [{
                             "value": "days",
@@ -479,9 +691,9 @@ Panel {
                             "explanation": "Shows the event's date itself (e.g. Jan 1) instead of a count."
                         }]
                         value: root.edPrecision
-                        foreground: root.barForeground
+                        foreground: root.foreground
                         accent: Color.accent
-                        fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                        fontFamily: root.fontFamily
                         onChanged: function(precision) {
                             root.switchPrecision(precision);
                         }

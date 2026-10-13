@@ -80,8 +80,15 @@ BarWidget {
         return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 8.64e+07;
     }
 
+    function _daysInMonth(year, month) {
+        return new Date(year, month, 0).getDate();
+    }
+
+    // Clamp the day so an impossible date (Feb 31, or Feb 29 outside a leap
+    // year) lands on the last day of its own month instead of rolling over
+    // into the next one.
     function _ydate(year, month, day) {
-        return new Date(year, month - 1, day);
+        return new Date(year, month - 1, Math.min(day, _daysInMonth(year, month)));
     }
 
     function _todayIndex() {
@@ -99,9 +106,10 @@ BarWidget {
         };
         if (evt.repeats) {
             var thisY = _dayIndex(_ydate(yNow, m, d));
-            var next = thisY >= t ? thisY : _dayIndex(_ydate(yNow + 1, m, d));
-            res.next = next;
-            res.prev = _dayIndex(_ydate(new Date(res.next * 8.64e+07).getFullYear() - 1, m, d));
+            res.next = thisY >= t ? thisY : _dayIndex(_ydate(yNow + 1, m, d));
+            // Most recent occurrence that is not in the future. Today counts,
+            // so counting up reads "today" on the day itself.
+            res.prev = thisY <= t ? thisY : _dayIndex(_ydate(yNow - 1, m, d));
             res.passed = false;
             return res;
         }
@@ -149,22 +157,27 @@ BarWidget {
 
         var text;
         if (p === "date" && days >= 7)
-            text = _dateLabel(evt, o, upcoming, anchor);
+            text = _dateLabel(evt, o, upcoming, anchor, now);
         else
             text = _unitText(days, upcoming, p);
 
         return {
             "text": text,
             "upcoming": upcoming,
-            "days": days
+            "days": days,
+            // Day index of the occurrence being counted, and how far today
+            // is between the occurrence before it and that one (0 to 1).
+            "anchor": anchor,
+            "progress": o.next > o.prev ? Math.max(0, Math.min(1, (t - o.prev) / (o.next - o.prev))) : 1
         };
     }
 
-function _dateLabel(evt, o, upcoming, anchor) {
+    function _dateLabel(evt, o, upcoming, anchor, now) {
         var arrow = upcoming ? "\u2192 " : "\u2190 ";
         var idx = anchor === undefined ? o.next : anchor;
-        var y = new Date(idx * 8.64e+07).getFullYear();
-        var yNow = new Date().getFullYear();
+        // Day indexes are UTC days, so the year has to be read in UTC too.
+        var y = new Date(idx * 8.64e+07).getUTCFullYear();
+        var yNow = (now || new Date()).getFullYear();
         return arrow + _monthDayName(evt) + (y !== yNow ? " " + y : "");
     }
 
@@ -238,7 +251,7 @@ function _dateLabel(evt, o, upcoming, anchor) {
                 continue;
 
             var m = parseInt(e.month, 10), d = parseInt(e.day, 10);
-            if (isNaN(m) || isNaN(d))
+            if (isNaN(m) || isNaN(d) || m < 1 || m > 12 || d < 1 || d > 31)
                 continue;
 
             out.push({
@@ -339,12 +352,20 @@ function _dateLabel(evt, o, upcoming, anchor) {
         return _tooltipText();
     }
 
-    function countOf(evt) {
-        return _countOf(evt);
+    function countOf(evt, now, precision, mode) {
+        return _countOf(evt, now, precision, mode);
+    }
+
+    function occurrences(evt, now) {
+        return _occurrences(evt, now);
     }
 
     function monthDayName(evt) {
         return _monthDayName(evt);
+    }
+
+    function daysInMonth(year, month) {
+        return _daysInMonth(year, month);
     }
 
     objectName: "eventCountdown"
@@ -460,7 +481,9 @@ function _dateLabel(evt, o, upcoming, anchor) {
             spacing: 6
 
             Text {
+                objectName: "eventName"
                 anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
                 text: barItem.barName
                 color: root.bar ? root.bar.foreground : "#f8f8f2"
                 font.family: root.bar ? root.bar.fontFamily : Style.font.family
@@ -468,8 +491,10 @@ function _dateLabel(evt, o, upcoming, anchor) {
             }
 
             Text {
+                objectName: "eventCount"
                 anchors.verticalCenter: parent.verticalCenter
                 visible: barItem.barCount !== ""
+                textFormat: Text.PlainText
                 text: barItem.barCount
                 color: root.bar ? Qt.darker(root.bar.foreground, 1.4) : "#999999"
                 font.family: root.bar ? root.bar.fontFamily : Style.font.family
