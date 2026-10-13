@@ -164,7 +164,11 @@ BarWidget {
         return {
             "text": text,
             "upcoming": upcoming,
-            "days": days
+            "days": days,
+            // Day index of the occurrence being counted, and how far today
+            // is between the occurrence before it and that one (0 to 1).
+            "anchor": anchor,
+            "progress": o.next > o.prev ? Math.max(0, Math.min(1, (t - o.prev) / (o.next - o.prev))) : 1
         };
     }
 

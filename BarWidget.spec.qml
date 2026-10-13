@@ -154,6 +154,87 @@ Item {
         h.compare(saved.month + "/" + saved.day, "4/30");
     }
 
+    // --- The panel's card --------------------------------------------------
+
+    function* test_theCardShowsWhatIsBeingCounted() {
+        var soon = new Date();
+        soon.setDate(soon.getDate() + 10);
+        var w = widgetWith([event("Launch", soon.getMonth() + 1, soon.getDate(), soon.getFullYear())]);
+        yield 50;
+        w.open();
+        yield 50;
+        var card = h.byName("eventCard");
+        h.compare(card.visible, true);
+        h.compare(card.name, "Launch");
+        h.compare(card.value + " " + card.unit + " " + card.note, "10 days to go");
+        h.verify(card.detail.indexOf("one-off") > 0, card.detail);
+        h.compare(h.byName("titleDay").text, String(soon.getDate()));
+        h.compare(h.byName("titleCaption").text, Qt.locale().toString(soon, soon.getFullYear() === new Date().getFullYear() ? "dddd, MMMM d" : "dddd, MMMM d, yyyy"));
+    }
+
+    function* test_theCardPreviewsAnEditBeforeItIsSaved() {
+        var w = widgetWith([event("Christmas", 12, 24)]);
+        yield 50;
+        w.open();
+        yield 50;
+        var field = h.byName("nameField");
+        h.click(field);
+        field.selectAll();
+        h.type("Yule");
+        h.compare(h.byName("eventCard").name, "Yule");
+        h.compare(h.byName("eventName").text, "Christmas", "the bar keeps the saved name until the panel closes");
+    }
+
+    function* test_theCardFollowsTheCountDirection() {
+        var w = widgetWith([event("Midsummer", 6, 24)], "both");
+        yield 50;
+        w.open();
+        yield 50;
+        var card = h.byName("eventCard");
+        var down = w.countOf(w.events[0], undefined, "units", "both");
+        h.compare(card.value, down.days === 0 ? "Today" : String(down.days));
+        h.byName("modeField").changed("countup");
+        yield 50;
+        var up = w.countOf(w.events[0], undefined, "units", "countup");
+        h.compare(card.value, up.days === 0 ? "Today" : String(up.days));
+        h.compare(card.note, up.days === 0 ? "" : "ago");
+        h.verify(card.progress >= 0 && card.progress <= 1, "progress " + card.progress);
+    }
+
+    function* test_theCardCountsFromTheMomentThePanelOpens() {
+        var w = widgetWith([event("Christmas", 12, 24)]);
+        yield 50;
+        w.open();
+        yield 50;
+        var panel = h.byName("eventCountdownPanel"), card = h.byName("eventCard");
+        var today = w.countOf(w.events[0], new Date(panel.nowMs), "units", "both").days;
+        h.compare(card.value, today === 0 ? "Today" : String(today));
+        // The same panel, shown again a day later.
+        panel.nowMs += 8.64e+07;
+        var tomorrow = w.countOf(w.events[0], new Date(panel.nowMs), "units", "both").days;
+        h.verify(tomorrow !== today, "a day makes a difference");
+        h.compare(card.value, tomorrow === 0 ? "Today" : String(tomorrow));
+    }
+
+    function* test_withoutAnEventThePanelOffersToAddOne() {
+        var w = widgetWith([]);
+        yield 50;
+        w.open();
+        yield 50;
+        h.compare(h.byName("eventCard").visible, false);
+        h.compare(h.byName("addEventButton").visible, true);
+        h.compare(h.byName("titleCaption").text, "Nothing to count down to yet");
+    }
+
+    function test_progressRunsFromTheLastOccurrenceToTheNext() {
+        var w = widgetWith([]);
+        h.compare(w.countOf(event("B", 6, 5), june5, "units", "both").progress, 1, "on the day");
+        var half = w.countOf(event("B", 12, 5), june5, "units", "both").progress;
+        h.verify(half > 0.49 && half < 0.51, "half a year on, got " + half);
+        h.compare(w.countOf(event("Far", 1, 1, 2030), june5, "units", "both").progress, 0, "a one-off more than a year away");
+        h.compare(w.countOf(event("Gone", 1, 1, 2020), june5, "units", "both").progress, 1, "a one-off that has passed");
+    }
+
     // --- Rendering ---------------------------------------------------------
 
     // The name is whatever the user typed; it must never be parsed as markup.
