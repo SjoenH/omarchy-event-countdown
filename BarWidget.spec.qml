@@ -99,6 +99,28 @@ Item {
         h.compare(saved.month + "/" + saved.day, "12/24");
     }
 
+    // While open, the panel is a full-screen overlay that takes every click.
+    // A save that throws must not leave it up with no way to dismiss it.
+    function* test_thePanelClosesEvenWhenSavingFails() {
+        var w = widgetWith([event("Christmas", 12, 24)]);
+        yield 50;
+        w.open();
+        yield 50;
+        var field = h.byName("nameField");
+        h.click(field);
+        field.selectAll();
+        h.type("Xmas");
+        h.persistFails = true;
+        var threw = false;
+        try {
+            w.close();
+        } catch (e) {
+            threw = true;
+        }
+        h.verify(threw, "the failed save is reported");
+        h.compare(w.opened, false, "and the panel is closed all the same");
+    }
+
     function* test_typingReachesTheNameFieldEvenForPanelShortcutKeys() {
         var w = widgetWith([event("A", 1, 1)]);
         yield 50;

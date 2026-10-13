@@ -237,13 +237,16 @@ Panel {
     }
 
     function close() {
+        // Hide first. While it is open the panel is a full-screen overlay
+        // that takes every click, so nothing that goes wrong while saving
+        // may leave it up.
+        root.controller.hide();
         root.applyEditors();
         // Only write when something was actually edited; closing an untouched
         // panel must leave shell.json alone.
         if (root.canCommit() && root.isDirty())
             root.commit();
 
-        root.controller.hide();
     }
 
     function switchPanel(direction) {
